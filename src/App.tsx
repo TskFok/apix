@@ -116,7 +116,9 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>Apix</h1>
+        <h1>
+          <img src="/logo.png" alt="Apix" className="app-logo" />
+        </h1>
         <div className="header-actions">
           <button
             type="button"
