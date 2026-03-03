@@ -95,8 +95,20 @@ function getStatusClass(status: number): string {
   return 'unknown';
 }
 
+/** 从响应头中获取 content-type（不区分大小写），可能带参数如 "text/html; charset=utf-8" */
+export function getContentTypeFromHeaders(headers: Record<string, string>): string | undefined {
+  const key = Object.keys(headers).find((k) => k.toLowerCase() === 'content-type');
+  return key ? headers[key] : undefined;
+}
+
+export function isHtmlResponse(headers: Record<string, string>): boolean {
+  const ct = getContentTypeFromHeaders(headers);
+  return ct != null && ct.trim().toLowerCase().startsWith('text/html');
+}
+
 export function ResponseViewer() {
   const [activeTab, setActiveTab] = useState<'headers' | 'body'>('body');
+  const [htmlViewMode, setHtmlViewMode] = useState<'preview' | 'source'>('preview');
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
@@ -105,6 +117,11 @@ export function ResponseViewer() {
 
   const { http } = useResponseStore();
   const { status, statusText, headers, body, timeMs, loading, error } = http;
+
+  const isHtml = isHtmlResponse(headers);
+  useEffect(() => {
+    if (!isHtml) setHtmlViewMode('preview');
+  }, [isHtml]);
 
   const searchableText = useMemo(() => {
     if (activeTab === 'headers') {
@@ -325,6 +342,46 @@ export function ResponseViewer() {
                 <span className="response-empty-icon">—</span>
                 <p>空响应体</p>
               </div>
+            ) : isHtml ? (
+              <>
+                <div className="response-html-tabs">
+                  <button
+                    type="button"
+                    className={`response-html-tab ${htmlViewMode === 'preview' ? 'active' : ''}`}
+                    onClick={() => setHtmlViewMode('preview')}
+                  >
+                    预览
+                  </button>
+                  <button
+                    type="button"
+                    className={`response-html-tab ${htmlViewMode === 'source' ? 'active' : ''}`}
+                    onClick={() => setHtmlViewMode('source')}
+                  >
+                    源代码
+                  </button>
+                </div>
+                {htmlViewMode === 'preview' ? (
+                  <div className="response-body-html-preview">
+                    <iframe
+                      title="HTML 预览"
+                      srcDoc={body}
+                      sandbox="allow-same-origin"
+                      className="response-body-html-iframe"
+                    />
+                  </div>
+                ) : showSearchableContent ? (
+                  <div className="response-body-json">
+                    <HighlightedText
+                      text={searchableText}
+                      searchQuery={searchQuery}
+                      contentRef={contentRef}
+                      currentMatchLine={matchCount > 0 ? matchLineIndices[currentMatchIndex] ?? -1 : -1}
+                    />
+                  </div>
+                ) : (
+                  <pre className="response-body-raw">{body}</pre>
+                )}
+              </>
             ) : showSearchableContent ? (
               <div className="response-body-json">
                 <HighlightedText
