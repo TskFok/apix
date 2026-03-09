@@ -1,4 +1,4 @@
-import { fetch } from '@tauri-apps/plugin-http';
+import { invoke } from '@tauri-apps/api/core';
 import type { HttpMethod } from '../types';
 
 export interface HttpRequestOptions {
@@ -16,72 +16,59 @@ export interface HttpResponse {
   timeMs: number;
 }
 
-function headersToRecord(headers: Headers): Record<string, string> {
-  const obj: Record<string, string> = {};
-  headers.forEach((v, k) => {
-    obj[k] = v;
-  });
-  return obj;
+interface RustHttpResponse {
+  status: number;
+  status_text: string;
+  headers: Record<string, string>;
+  body: string;
+  time_ms: number;
 }
 
 export async function sendHttpRequest(options: HttpRequestOptions): Promise<HttpResponse> {
-  const start = Date.now();
   const { method, url, headers = {}, body } = options;
 
-  const init: RequestInit = {
-    method,
-    headers: Object.entries(headers).reduce((acc, [k, v]) => {
-      if (v) acc[k] = v;
-      return acc;
-    }, {} as Record<string, string>),
-  };
+  const cleanHeaders: Record<string, string> = {};
+  for (const [k, v] of Object.entries(headers)) {
+    if (v) cleanHeaders[k] = v;
+  }
 
+  let bodyStr: string | undefined;
   if (body && method !== 'GET' && method !== 'HEAD') {
     if (typeof body === 'string') {
-      init.body = body;
+      bodyStr = body;
     } else if (body instanceof URLSearchParams) {
-      init.body = body.toString();
-      if (!(init.headers as Record<string, string>)['Content-Type']) {
-        (init.headers as Record<string, string>)['Content-Type'] =
-          'application/x-www-form-urlencoded';
+      bodyStr = body.toString();
+      if (!cleanHeaders['Content-Type']) {
+        cleanHeaders['Content-Type'] = 'application/x-www-form-urlencoded';
       }
     } else if (body instanceof FormData) {
-      init.body = body;
-      delete (init.headers as Record<string, string>)['Content-Type'];
+      // FormData 需要特殊处理：序列化为 multipart 字符串
+      // 目前先用浏览器 Request API 序列化
+      const req = new Request('http://localhost', { method: 'POST', body });
+      const buf = await req.arrayBuffer();
+      bodyStr = new TextDecoder().decode(buf);
+      const ct = req.headers.get('content-type');
+      if (ct) cleanHeaders['Content-Type'] = ct;
     } else if (body instanceof Uint8Array) {
-      init.body = body;
-      delete (init.headers as Record<string, string>)['Content-Type'];
+      bodyStr = new TextDecoder().decode(body);
     }
   }
 
-  const response = await fetch(url, init as RequestInit & { method: string });
-  const timeMs = Date.now() - start;
-
-  let bodyText = '';
-  if (response.body) {
-    const reader = response.body.getReader();
-    const chunks: Uint8Array[] = [];
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value) chunks.push(value);
-    }
-    const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
-    const result = new Uint8Array(totalLength);
-    let offset = 0;
-    for (const c of chunks) {
-      result.set(c, offset);
-      offset += c.length;
-    }
-    bodyText = new TextDecoder().decode(result);
-  }
+  const resp = await invoke<RustHttpResponse>('http_request', {
+    payload: {
+      method,
+      url,
+      headers: cleanHeaders,
+      body: bodyStr ?? null,
+    },
+  });
 
   return {
-    status: response.status,
-    statusText: response.statusText,
-    headers: headersToRecord(response.headers),
-    body: bodyText,
-    timeMs,
+    status: resp.status,
+    statusText: resp.status_text,
+    headers: resp.headers,
+    body: resp.body,
+    timeMs: resp.time_ms,
   };
 }
 

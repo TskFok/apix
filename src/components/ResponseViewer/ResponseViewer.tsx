@@ -119,9 +119,20 @@ export function ResponseViewer() {
   const { status, statusText, headers, body, timeMs, loading, error } = http;
 
   const isHtml = isHtmlResponse(headers);
+  // 若 body 可解析为 JSON，则按 JSON 显示，不因 Content-Type 为 text/html 而用 iframe 预览
+  const treatAsJson = useMemo(() => {
+    if (!body) return false;
+    try {
+      JSON.parse(body);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [body]);
+  const showAsHtml = isHtml && !treatAsJson;
   useEffect(() => {
-    if (!isHtml) setHtmlViewMode('preview');
-  }, [isHtml]);
+    if (!showAsHtml) setHtmlViewMode('preview');
+  }, [showAsHtml]);
 
   const searchableText = useMemo(() => {
     if (activeTab === 'headers') {
@@ -342,7 +353,7 @@ export function ResponseViewer() {
                 <span className="response-empty-icon">—</span>
                 <p>空响应体</p>
               </div>
-            ) : isHtml ? (
+            ) : showAsHtml ? (
               <>
                 <div className="response-html-tabs">
                   <button

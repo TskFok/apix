@@ -97,4 +97,38 @@ describe('ResponseViewer text/html 美化显示', () => {
     expect(screen.queryByRole('button', { name: '源代码' })).not.toBeInTheDocument();
     expect(screen.queryByTitle('HTML 预览')).not.toBeInTheDocument();
   });
+
+  it('当 JSON 含 code/message/data/title 且 data 为空字符串时仍显示内容', () => {
+    const body =
+      '{"code":"-50","message":"\\u65e0\\u6cd5\\u83b7\\u53d6\\u4f1a\\u5458\\u767b\\u5f55\\u4fe1\\u606f","data":"","title":"\\u83b7\\u53d6\\u4f1a\\u5458\\u8be6\\u7ec6\\u4fe1\\u606f"}';
+    useResponseStore.getState().setHttpResponse({
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+      body,
+      loading: false,
+    });
+
+    render(<ResponseViewer />);
+
+    // 应显示 JSON 内容，而非空响应体
+    expect(screen.queryByText('空响应体')).not.toBeInTheDocument();
+    expect(screen.getByText(/无法获取会员登录信息/)).toBeInTheDocument();
+  });
+
+  it('当 Content-Type 为 text/html 但 body 为 JSON 时按 JSON 显示', () => {
+    const body =
+      '{"code":"-50","message":"\\u65e0\\u6cd5\\u83b7\\u53d6\\u4f1a\\u5458\\u767b\\u5f55\\u4fe1\\u606f","data":"","title":"\\u83b7\\u53d6\\u4f1a\\u5458\\u8be6\\u7ec6\\u4fe1\\u606f"}';
+    useResponseStore.getState().setHttpResponse({
+      status: 200,
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+      body,
+      loading: false,
+    });
+
+    render(<ResponseViewer />);
+
+    // 应显示 JSON 树视图，而非 HTML 预览（避免 iframe 中 JSON 显示异常）
+    expect(screen.queryByTitle('HTML 预览')).not.toBeInTheDocument();
+    expect(screen.getByText(/无法获取会员登录信息/)).toBeInTheDocument();
+  });
 });
