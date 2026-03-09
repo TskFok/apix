@@ -37,6 +37,7 @@ coverage
 .vscode/*
 !.vscode/extensions.json
 .idea
+.history
 .DS_Store
 Thumbs.db
 *.suo
