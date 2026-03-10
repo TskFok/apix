@@ -6,6 +6,7 @@ import { HistoryPanel } from './components/HistoryPanel';
 import { FavoritesPanel } from './components/FavoritesPanel';
 import { useRequestStore } from './stores/requestStore';
 import { useResponseStore } from './stores/responseStore';
+import { useSettingsStore, IDLE_TIMEOUT_OPTIONS } from './stores/settingsStore';
 import { useHttpRequest } from './hooks/useHttpRequest';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useSSE } from './hooks/useSSE';
@@ -61,6 +62,8 @@ function App() {
   }, [theme]);
 
   const toggleTheme = () => setTheme((t) => (t === 'light' ? 'dark' : 'light'));
+  const idleTimeoutMs = useSettingsStore((s) => s.idleTimeoutMs);
+  const setIdleTimeoutMs = useSettingsStore((s) => s.setIdleTimeoutMs);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -120,6 +123,23 @@ function App() {
           <img src="/logo.png" alt="Apix" className="app-logo" />
         </h1>
         <div className="header-actions">
+          {(protocol === 'ws' || protocol === 'sse') && (
+            <label className="idle-timeout-label">
+              <span className="idle-timeout-text">空闲超时</span>
+              <select
+                className="idle-timeout-select"
+                value={idleTimeoutMs}
+                onChange={(e) => setIdleTimeoutMs(Number(e.target.value))}
+                title="连接空闲超过此时间将自动断开"
+              >
+                {IDLE_TIMEOUT_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <button
             type="button"
             className="theme-toggle-btn"

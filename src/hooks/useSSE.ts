@@ -2,11 +2,15 @@ import { useCallback, useRef } from 'react';
 import { fetch } from '@tauri-apps/plugin-http';
 import { useRequestStore } from '../stores/requestStore';
 import { useResponseStore } from '../stores/responseStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import { addHistory } from '../lib/db';
 import { buildUrl } from '../lib/http';
 import { SSEParser } from '../lib/sse';
 
 let abortController: AbortController | null = null;
+let sseIdleCheckInterval: ReturnType<typeof setInterval> | null = null;
+
+const IDLE_CHECK_INTERVAL_MS = 30_000;
 
 export function useSSE() {
   const { url, getHeadersRecord, getQueryParamsRecord, getHeadersForStorage, getParamsForStorage } = useRequestStore();
@@ -16,7 +20,9 @@ export function useSSE() {
     clearStreamMessages,
     refreshHistory,
   } = useResponseStore();
+  const idleTimeoutMs = useSettingsStore((s) => s.idleTimeoutMs);
   const connectedAtRef = useRef<number>(0);
+  const lastActivityRef = useRef<number>(0);
 
   const connect = useCallback(async () => {
     if (!url.trim()) return;
@@ -25,6 +31,7 @@ export function useSSE() {
     setStreamState({ loading: true, error: undefined });
     clearStreamMessages();
     connectedAtRef.current = Date.now();
+    lastActivityRef.current = Date.now();
 
     try {
       const fullUrl = buildUrl(url, getQueryParamsRecord());
@@ -45,6 +52,15 @@ export function useSSE() {
 
       setStreamState({ connected: true, loading: false });
 
+      if (idleTimeoutMs > 0) {
+        sseIdleCheckInterval = setInterval(() => {
+          const idle = Date.now() - lastActivityRef.current;
+          if (idle >= idleTimeoutMs && abortController) {
+            abortController.abort();
+          }
+        }, IDLE_CHECK_INTERVAL_MS);
+      }
+
       if (response.body) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -56,6 +72,7 @@ export function useSSE() {
             if (done) break;
             const chunk = decoder.decode(value, { stream: true });
             parser.parse(chunk, (event) => {
+              lastActivityRef.current = Date.now();
               const content = event.data ?? JSON.stringify(event);
               addStreamMessage({
                 direction: 'in',
@@ -66,6 +83,7 @@ export function useSSE() {
             });
           }
           parser.flush((event) => {
+            lastActivityRef.current = Date.now();
             const content = event.data ?? JSON.stringify(event);
             addStreamMessage({
               direction: 'in',
@@ -114,6 +132,10 @@ export function useSSE() {
         });
       }
     } finally {
+      if (sseIdleCheckInterval) {
+        clearInterval(sseIdleCheckInterval);
+        sseIdleCheckInterval = null;
+      }
       abortController = null;
       setStreamState({ connected: false });
     }
@@ -123,6 +145,7 @@ export function useSSE() {
     getQueryParamsRecord,
     getHeadersForStorage,
     getParamsForStorage,
+    idleTimeoutMs,
     setStreamState,
     addStreamMessage,
     clearStreamMessages,
