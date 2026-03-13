@@ -19,6 +19,11 @@ const SIDEBAR_DEFAULT = 260;
 const STORAGE_KEY = 'apix-sidebar-width';
 const THEME_KEY = 'apix-theme';
 
+const REQUEST_PANEL_MIN = 120;
+const REQUEST_PANEL_MAX = 600;
+const REQUEST_PANEL_DEFAULT = 280;
+const REQUEST_PANEL_STORAGE_KEY = 'apix-request-panel-height';
+
 function getInitialTheme(): 'light' | 'dark' {
   const stored = localStorage.getItem(THEME_KEY);
   if (stored === 'light' || stored === 'dark') return stored;
@@ -36,7 +41,17 @@ function App() {
     }
     return SIDEBAR_DEFAULT;
   });
+  const [requestPanelHeight, setRequestPanelHeight] = useState(() => {
+    const stored = localStorage.getItem(REQUEST_PANEL_STORAGE_KEY);
+    if (stored) {
+      const h = parseInt(stored, 10);
+      if (!Number.isNaN(h) && h >= REQUEST_PANEL_MIN && h <= REQUEST_PANEL_MAX) return h;
+    }
+    return REQUEST_PANEL_DEFAULT;
+  });
   const isResizing = useRef(false);
+  const isRequestPanelResizing = useRef(false);
+  const mainRef = useRef<HTMLElement>(null);
   const protocol = useRequestStore((s) => s.protocol);
   const streamConnected = useResponseStore((s) => s.stream.connected);
   const responseMode = useResponseStore((s) => s.mode);
@@ -67,13 +82,25 @@ function App() {
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
-      if (!isResizing.current) return;
-      const w = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, e.clientX));
-      setSidebarWidth(w);
-      localStorage.setItem(STORAGE_KEY, String(w));
+      if (isResizing.current) {
+        const w = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, e.clientX));
+        setSidebarWidth(w);
+        localStorage.setItem(STORAGE_KEY, String(w));
+      }
+      if (isRequestPanelResizing.current && mainRef.current) {
+        const rect = mainRef.current.getBoundingClientRect();
+        const maxH = rect.height - 80;
+        const newH = Math.max(
+          REQUEST_PANEL_MIN,
+          Math.min(maxH, e.clientY - rect.top - 16)
+        );
+        setRequestPanelHeight(newH);
+        localStorage.setItem(REQUEST_PANEL_STORAGE_KEY, String(newH));
+      }
     };
     const onUp = () => {
       isResizing.current = false;
+      isRequestPanelResizing.current = false;
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };
@@ -201,18 +228,33 @@ function App() {
           role="separator"
           aria-label="调整侧边栏宽度"
         />
-        <main className="main">
-          <RequestBuilder
-            onSendHttp={sendHttp}
-            onConnectWs={connectWs}
-            onDisconnectWs={disconnectWs}
-            onConnectSse={connectSse}
-            onDisconnectSse={disconnectSse}
-            onSendWsMessage={wsConnected ? sendWs : undefined}
-            wsConnected={!!wsConnected}
-            sseConnected={!!sseConnected}
+        <main ref={mainRef} className="main">
+          <div
+            className="request-panel-wrapper"
+            style={{ height: requestPanelHeight, minHeight: requestPanelHeight, maxHeight: requestPanelHeight }}
+          >
+            <RequestBuilder
+              onSendHttp={sendHttp}
+              onConnectWs={connectWs}
+              onDisconnectWs={disconnectWs}
+              onConnectSse={connectSse}
+              onDisconnectSse={disconnectSse}
+              onSendWsMessage={wsConnected ? sendWs : undefined}
+              wsConnected={!!wsConnected}
+              sseConnected={!!sseConnected}
+            />
+          </div>
+          <div
+            className="request-response-resizer"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              isRequestPanelResizing.current = true;
+              document.body.style.cursor = 'row-resize';
+              document.body.style.userSelect = 'none';
+            }}
+            role="separator"
+            aria-label="调整请求区与响应区高度"
           />
-
           <div className="response-area">
             {responseMode === 'http' ? (
               <ResponseViewer />

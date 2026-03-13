@@ -253,6 +253,28 @@ button:focus {
   padding: 16px;
 }
 
+.request-panel-wrapper {
+  flex-shrink: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.request-panel-wrapper .request-builder {
+  margin-bottom: 0;
+}
+
+.request-response-resizer {
+  height: 8px;
+  flex-shrink: 0;
+  cursor: row-resize;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.request-response-resizer:hover {
+  background: #2463eb;
+}
+
 .request-builder {
   background: #fff;
   border-radius: 8px;
@@ -2019,6 +2041,10 @@ html[data-theme="dark"] {
   }
 
   .sidebar-resizer:hover {
+    background: #60a5fa;
+  }
+
+  .request-response-resizer:hover {
     background: #60a5fa;
   }
 
