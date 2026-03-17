@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useRequestStore } from '../../stores/requestStore';
 import type { HttpMethod, BodyType } from '../../types';
 import { FileSelectModal } from '../FileSelectModal/FileSelectModal';
+import { buildDisplayUrl, parseUrlToBaseAndParams } from '../../lib/http';
 
 const METHODS: HttpMethod[] = [
   'GET',
@@ -63,7 +64,29 @@ export function RequestBuilder({
     removeQueryParam,
     addBodyFormField,
     removeBodyFormField,
+    getQueryParamsRecord,
   } = useRequestStore();
+
+  const displayUrl = useMemo(
+    () => buildDisplayUrl(url, getQueryParamsRecord()),
+    [url, getQueryParamsRecord, queryParams]
+  );
+
+  const handleUrlChange = useCallback(
+    (value: string) => {
+      const { base, params } = parseUrlToBaseAndParams(value);
+      setUrl(base);
+      if (params.length > 0) {
+        const EMPTY_KV = { key: '', value: '', description: '', enabled: true };
+        const next = params.map((p) => ({ ...p, description: '', enabled: true }));
+        next.push({ ...EMPTY_KV });
+        setQueryParams(next);
+      } else {
+        setQueryParams([{ key: '', value: '', description: '', enabled: true }]);
+      }
+    },
+    [setUrl, setQueryParams]
+  );
 
   const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body'>('params');
   const [fileModalFieldIndex, setFileModalFieldIndex] = useState<number | null>(null);
@@ -134,8 +157,8 @@ export function RequestBuilder({
             type="text"
             autoCapitalize="off"
             autoCorrect="off"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
+            value={displayUrl}
+            onChange={(e) => handleUrlChange(e.target.value)}
             placeholder={
               isHttp
                 ? 'https://api.example.com/...'

@@ -81,3 +81,44 @@ export function buildUrl(base: string, params: Record<string, string>): string {
   if (!query) return base;
   return base.includes('?') ? `${base}&${query}` : `${base}?${query}`;
 }
+
+/** 仅编码 & 和 =，用于地址栏展示，避免 [ ] 等被转成 %5B %5D */
+function encodeForDisplay(s: string): string {
+  return s.replace(/&/g, '%26').replace(/=/g, '%3D');
+}
+
+/** 构建用于地址栏展示的 URL，保留 [0] 等字符原样显示 */
+export function buildDisplayUrl(base: string, params: Record<string, string>): string {
+  const parts = Object.entries(params)
+    .filter(([k, v]) => k && v)
+    .map(([k, v]) => `${encodeForDisplay(k)}=${encodeForDisplay(v)}`);
+  const query = parts.join('&');
+  if (!query) return base;
+  return base.includes('?') ? `${base}&${query}` : `${base}?${query}`;
+}
+
+export interface ParsedUrl {
+  base: string;
+  params: Array<{ key: string; value: string }>;
+}
+
+/**
+ * 将完整 URL 解析为 base（不含查询串）和 params 列表。
+ * 解析失败时返回 base 为原输入、params 为空。
+ */
+export function parseUrlToBaseAndParams(full: string): ParsedUrl {
+  try {
+    const url = new URL(full);
+    let base = url.origin + url.pathname;
+    if (base.endsWith('/') && url.pathname === '/') {
+      base = base.slice(0, -1);
+    }
+    const params: Array<{ key: string; value: string }> = [];
+    url.searchParams.forEach((value, key) => {
+      params.push({ key, value });
+    });
+    return { base, params };
+  } catch {
+    return { base: full, params: [] };
+  }
+}

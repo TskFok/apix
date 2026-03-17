@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildUrl } from "./http";
+import { buildUrl, buildDisplayUrl, parseUrlToBaseAndParams } from "./http";
 
 describe("buildUrl", () => {
   it("无参数时返回原 URL", () => {
@@ -30,5 +30,53 @@ describe("buildUrl", () => {
     expect(
       buildUrl("https://api.example.com", { "": "ignored", foo: "bar" } as Record<string, string>)
     ).toBe("https://api.example.com?foo=bar");
+  });
+});
+
+describe("buildDisplayUrl", () => {
+  it("[0] 等字符保持原样不编码", () => {
+    expect(buildDisplayUrl("https://api.example.com", { arr: "[0]" })).toBe(
+      "https://api.example.com?arr=[0]"
+    );
+  });
+
+  it("& 和 = 会被编码", () => {
+    expect(buildDisplayUrl("https://api.example.com", { "a&b": "c=d" })).toBe(
+      "https://api.example.com?a%26b=c%3Dd"
+    );
+  });
+});
+
+describe("parseUrlToBaseAndParams", () => {
+  it("解析无查询串的 URL", () => {
+    const r = parseUrlToBaseAndParams("https://api.example.com/path");
+    expect(r.base).toBe("https://api.example.com/path");
+    expect(r.params).toEqual([]);
+  });
+
+  it("解析带单个参数的 URL", () => {
+    const r = parseUrlToBaseAndParams("https://api.example.com?foo=bar");
+    expect(r.base).toBe("https://api.example.com");
+    expect(r.params).toEqual([{ key: "foo", value: "bar" }]);
+  });
+
+  it("解析带 path 的 URL", () => {
+    const r = parseUrlToBaseAndParams("https://api.example.com/path?foo=bar");
+    expect(r.base).toBe("https://api.example.com/path");
+    expect(r.params).toEqual([{ key: "foo", value: "bar" }]);
+  });
+
+  it("解析带多个参数的 URL", () => {
+    const r = parseUrlToBaseAndParams("https://api.example.com?a=1&b=2");
+    expect(r.base).toBe("https://api.example.com");
+    expect(r.params).toHaveLength(2);
+    expect(r.params).toContainEqual({ key: "a", value: "1" });
+    expect(r.params).toContainEqual({ key: "b", value: "2" });
+  });
+
+  it("无效 URL 时返回原输入和空 params", () => {
+    const r = parseUrlToBaseAndParams("not-a-valid-url");
+    expect(r.base).toBe("not-a-valid-url");
+    expect(r.params).toEqual([]);
   });
 });
