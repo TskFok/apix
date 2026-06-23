@@ -1,0 +1,179 @@
+.file-select-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--color-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.file-select-modal {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  width: 420px;
+  max-width: 90vw;
+  max-height: 80vh;
+  box-shadow: var(--shadow-popover);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.file-select-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.file-select-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-strong);
+}
+
+.file-select-close {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.file-select-close:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-strong);
+}
+
+.file-select-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.file-select-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-primary-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-active);
+}
+
+.file-select-chips {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 24px;
+}
+
+.file-select-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: var(--color-primary-soft);
+  border: 1px solid var(--color-primary-border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--color-primary-text);
+}
+
+.file-select-chip-name {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-select-chip-remove {
+  padding: 0;
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: transparent;
+  color: var(--color-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.file-select-chip-remove:hover {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+.file-select-placeholder {
+  flex: 1;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.file-select-clear {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.file-select-clear:hover {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+.file-select-local-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-subtle);
+  color: var(--color-muted-strong);
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.file-select-local-btn:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-strong);
+}
+
+.file-select-plus {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--color-primary-text);
+}
+
+/* 无文件时 input 区域样式 */
+.file-select-input-wrap:has(.file-select-placeholder) {
+  border-color: var(--color-border);
+  box-shadow: none;
+}

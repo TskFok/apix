@@ -1,0 +1,40 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:app:allow-set-app-theme",
+    "opener:default",
+    "http:default",
+    "upload:default",
+    "websocket:default",
+    "sql:default",
+    "sql:allow-execute",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "http://**" },
+        { "url": "https://**" }
+      ]
+    },
+    "dialog:default",
+    "fs:default",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "$HOME/**" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-write-text-file",
+      "allow": [{ "path": "$HOME/**" }]
+    },
+    {
+      "identifier": "fs:allow-read-text-file",
+      "allow": [{ "path": "$HOME/**" }]
+    },
+    "core:webview:allow-internal-toggle-devtools"
+  ]
+}
