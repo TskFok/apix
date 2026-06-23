@@ -4,6 +4,8 @@ import { useRequestStore } from '../../stores/requestStore';
 import type { HttpMethod, BodyType } from '../../types';
 import { FileSelectModal } from '../FileSelectModal/FileSelectModal';
 import { FastTooltip } from '../FastTooltip/FastTooltip';
+import { Modal } from '../Modal/Modal';
+import { EMPTY_BODY_FORM_FIELD, parseUrlEncodedBodyInput } from '../../lib/bodyForm';
 import { buildDisplayUrlFromQueryFields, parseUrlToBaseAndParams } from '../../lib/http';
 import { buildCurlCommandFromRequest } from '../../lib/buildCurlCommand';
 
@@ -154,6 +156,7 @@ export function RequestBuilder({
 
   const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body'>('params');
   const [fileModalFieldIndex, setFileModalFieldIndex] = useState<number | null>(null);
+  const [bodyImportModalOpen, setBodyImportModalOpen] = useState(false);
 
   const isHttp = protocol === 'http';
   const isWs = protocol === 'ws';
@@ -224,6 +227,15 @@ export function RequestBuilder({
       }
     }
   }, []);
+
+  const handleImportUrlEncodedBody = useCallback(
+    (value: string) => {
+      const fields = parseUrlEncodedBodyInput(value);
+      if (fields.length === 0) return;
+      setBodyFormFields([...fields, { ...EMPTY_BODY_FORM_FIELD }]);
+    },
+    [setBodyFormFields]
+  );
 
   return (
     <div className="request-builder">
@@ -532,20 +544,31 @@ export function RequestBuilder({
         )}
         {activeTab === 'body' && isHttp && (
           <div className="body-editor">
-            <div className="body-type-select">
-              {(['form-data', 'x-www-form-urlencoded', 'raw', 'binary'] as BodyType[]).map((t) => (
-                <label key={t}>
-                  <input
-                    type="radio"
-                    checked={bodyType === t}
-                    onChange={() => setBodyType(t)}
-                  />
-                  {t === 'form-data' && 'form-data'}
-                  {t === 'x-www-form-urlencoded' && 'x-www-form-urlencoded'}
-                  {t === 'raw' && 'raw'}
-                  {t === 'binary' && 'binary'}
-                </label>
-              ))}
+            <div className="body-editor-toolbar">
+              <div className="body-type-select">
+                {(['form-data', 'x-www-form-urlencoded', 'raw', 'binary'] as BodyType[]).map((t) => (
+                  <label key={t}>
+                    <input
+                      type="radio"
+                      checked={bodyType === t}
+                      onChange={() => setBodyType(t)}
+                    />
+                    {t === 'form-data' && 'form-data'}
+                    {t === 'x-www-form-urlencoded' && 'x-www-form-urlencoded'}
+                    {t === 'raw' && 'raw'}
+                    {t === 'binary' && 'binary'}
+                  </label>
+                ))}
+              </div>
+              <FastTooltip label="粘贴 a=1&b=1 格式并填充到 Body">
+                <button
+                  type="button"
+                  className="body-import-btn"
+                  onClick={() => setBodyImportModalOpen(true)}
+                >
+                  导入
+                </button>
+              </FastTooltip>
             </div>
 
             {(bodyType === 'form-data' || bodyType === 'x-www-form-urlencoded') && (
@@ -816,6 +839,14 @@ export function RequestBuilder({
           </div>
         )}
       </div>
+      <Modal
+        open={bodyImportModalOpen}
+        title="导入 Body"
+        placeholder="a=1&b=1"
+        confirmLabel="填充 Body"
+        onClose={() => setBodyImportModalOpen(false)}
+        onConfirm={handleImportUrlEncodedBody}
+      />
     </div>
   );
 }

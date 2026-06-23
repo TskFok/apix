@@ -54,4 +54,30 @@ describe('RequestBuilder', () => {
     fireEvent.blur(input);
     expect(input.value).toBe('https://example.com/Path?A=1&B=');
   });
+
+  it('从弹窗导入 a=1&b=1 格式数据到 Body 表格且不切换 Body 类型', () => {
+    render(
+      <RequestBuilder
+        onSendHttp={noop}
+        onConnectWs={noop}
+        onDisconnectWs={noop}
+        onConnectSse={noop}
+        onDisconnectSse={noop}
+        wsConnected={false}
+        sseConnected={false}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Body' }));
+    fireEvent.click(screen.getByRole('button', { name: '导入' }));
+
+    const input = screen.getByPlaceholderText('a=1&b=1') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'a=1&b=1' } });
+    fireEvent.click(screen.getByRole('button', { name: '填充 Body' }));
+
+    expect(screen.getByLabelText('form-data')).toBeChecked();
+    expect(screen.getByDisplayValue('a')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('b')).toBeInTheDocument();
+    expect(screen.getAllByDisplayValue('1')).toHaveLength(2);
+  });
 });

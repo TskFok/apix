@@ -790,6 +790,15 @@ select:focus-visible,
   font-size: 13px;
 }
 
+.body-editor-toolbar {
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .body-type-select {
   margin-bottom: 12px;
   display: flex;
@@ -797,11 +806,35 @@ select:focus-visible,
   gap: 12px;
 }
 
+.body-editor-toolbar .body-type-select {
+  margin-bottom: 0;
+}
+
 .body-type-select label {
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.body-import-btn {
+  padding: 6px 12px;
+  font-size: 13px;
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-muted-strong);
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.body-import-btn:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-primary-border);
+  color: var(--color-primary-text);
 }
 
 .body-form-fields {
