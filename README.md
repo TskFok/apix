@@ -153,7 +153,7 @@ npm run test:watch
 
 ## 提交规范
 
-日常提交采用 Conventional Commits，英文动词开头、简短明确，例如 `feat: add env switch`、`fix: resolve header merge`。类型与示例见 [docs/commit-conventions.md](./docs/commit-conventions.md)。GitHub Release 说明会按提交 type 自动分组生成。
+日常提交采用 Conventional Commits，type 用英文、说明用中文，例如 `feat: 新增环境切换`、`fix: 修复请求头合并`。类型与示例见 [docs/commit-conventions.md](./docs/commit-conventions.md)。GitHub Release 说明会按提交 type 自动分组生成。
 
 ## 发布
 

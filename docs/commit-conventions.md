@@ -1,6 +1,6 @@
 # 提交信息规范
 
-本项目采用 [Conventional Commits](https://www.conventionalcommits.org/)。提交信息**尽量用英文动词开头**，保持简短明确。
+本项目采用 [Conventional Commits](https://www.conventionalcommits.org/)。提交信息**尽量用英文动词开头**（type），**具体内容使用中文**，保持简短明确。
 
 ## 格式
 
@@ -11,7 +11,7 @@
 | 字段 | 说明 |
 |------|------|
 | `type` | 变更类型，见下表 |
-| `subject` | 一句话描述，英文祈使语气，小写开头，结尾不加句号 |
+| `subject` | 一句话描述，中文，结尾不加句号 |
 
 可选：正文与 footer 遵循 Conventional Commits，用于说明动机、Breaking Changes 或关联 Issue。
 
@@ -31,14 +31,14 @@
 ## 示例
 
 ```
-feat: add websocket message export
-fix: restore draft after env switch
-refactor: split response panel components
+feat: 新增 WebSocket 消息导出
+fix: 修复环境切换后草稿丢失
+refactor: 拆分响应面板组件
 chore: release v0.2.0
-ci: run frontend tests on release build
-build: update tauri plugin dependencies
-docs: add commit message guidelines
-test: add cases for variable substitution
+ci: 发布构建中运行前端测试
+build: 更新 tauri 插件依赖
+docs: 补充提交信息规范
+test: 覆盖变量替换场景
 ```
 
 ## 版本发布
