@@ -35,8 +35,8 @@ coverage
 .superpowers/
 
 # Editor & OS
-.vscode/*
-!.vscode/extensions.json
+.cursor
+.vscode
 .idea
 .history/
 .DS_Store
