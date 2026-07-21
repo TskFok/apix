@@ -80,4 +80,66 @@ describe('RequestBuilder', () => {
     expect(screen.getByDisplayValue('b')).toBeInTheDocument();
     expect(screen.getAllByDisplayValue('1')).toHaveLength(2);
   });
+
+  it('从弹窗导入 cURL 并回填请求表单', () => {
+    render(
+      <RequestBuilder
+        onSendHttp={noop}
+        onConnectWs={noop}
+        onDisconnectWs={noop}
+        onConnectSse={noop}
+        onDisconnectSse={noop}
+        wsConnected={false}
+        sseConnected={false}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '导入 cURL 命令' }));
+    const curlInput = screen.getByPlaceholderText('curl -X POST ...');
+    expect(curlInput.tagName).toBe('TEXTAREA');
+    fireEvent.change(curlInput, {
+      target: {
+        value:
+          "curl -X POST -H 'Content-Type: application/json' -d '{\"name\":\"Ada\"}' 'https://api.example.com/users?source=cli'",
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '填充请求' }));
+
+    const state = useRequestStore.getState();
+    expect(state.protocol).toBe('http');
+    expect(state.method).toBe('POST');
+    expect(state.url).toBe('https://api.example.com/users');
+    expect(state.headers[0]).toMatchObject({
+      key: 'Content-Type',
+      value: 'application/json',
+    });
+    expect(state.queryParams[0]).toMatchObject({ key: 'source', value: 'cli' });
+    expect(state.bodyType).toBe('raw');
+    expect(state.rawType).toBe('json');
+    expect(state.body).toBe('{"name":"Ada"}');
+  });
+
+  it('导入无效 cURL 时保留当前请求', () => {
+    useRequestStore.getState().setMethod('PATCH');
+    render(
+      <RequestBuilder
+        onSendHttp={noop}
+        onConnectWs={noop}
+        onDisconnectWs={noop}
+        onConnectSse={noop}
+        onDisconnectSse={noop}
+        wsConnected={false}
+        sseConnected={false}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '导入 cURL 命令' }));
+    fireEvent.change(screen.getByPlaceholderText('curl -X POST ...'), {
+      target: { value: 'curl -X POST -d {}' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '填充请求' }));
+
+    expect(useRequestStore.getState().method).toBe('PATCH');
+    expect(useRequestStore.getState().url).toBe('https://example.com/api');
+  });
 });

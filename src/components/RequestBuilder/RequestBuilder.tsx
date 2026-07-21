@@ -8,6 +8,7 @@ import { Modal } from '../Modal/Modal';
 import { EMPTY_BODY_FORM_FIELD, parseUrlEncodedBodyInput } from '../../lib/bodyForm';
 import { buildDisplayUrlFromQueryFields, parseUrlToBaseAndParams } from '../../lib/http';
 import { buildCurlCommandFromRequest } from '../../lib/buildCurlCommand';
+import { parseCurlCommand } from '../../lib/parseCurlCommand';
 
 const METHODS: HttpMethod[] = [
   'GET',
@@ -157,6 +158,7 @@ export function RequestBuilder({
   const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body'>('params');
   const [fileModalFieldIndex, setFileModalFieldIndex] = useState<number | null>(null);
   const [bodyImportModalOpen, setBodyImportModalOpen] = useState(false);
+  const [curlImportModalOpen, setCurlImportModalOpen] = useState(false);
 
   const isHttp = protocol === 'http';
   const isWs = protocol === 'ws';
@@ -237,6 +239,54 @@ export function RequestBuilder({
     [setBodyFormFields]
   );
 
+  const handleImportCurl = useCallback(
+    (value: string) => {
+      const parsed = parseCurlCommand(value);
+      if (!parsed) return;
+
+      const { base, params, trailingAmpersand } = parseUrlToBaseAndParams(parsed.url);
+      const emptyQueryField = { key: '', value: '', description: '', enabled: true };
+      const importedQueryParams = params.map((param) => ({
+        key: param.key,
+        value: param.value,
+        description: '',
+        enabled: true,
+        ...(param.value === '' && param.emptyValueHasTrailingEquals
+          ? { queryEmptyShowsEquals: true as const }
+          : {}),
+      }));
+
+      setProtocol('http');
+      setMethod(parsed.method);
+      setUrl(base);
+      setHeaders(parsed.headers);
+      setQueryParams(
+        importedQueryParams.length > 0
+          ? [...importedQueryParams, emptyQueryField]
+          : [emptyQueryField]
+      );
+      setQueryTrailingAmpersand(!!trailingAmpersand);
+      setBodyType(parsed.bodyType);
+      setBodyFormFields(parsed.bodyFormFields);
+      setBody(parsed.body);
+      setRawType(parsed.rawType);
+      setBinaryPath(parsed.binaryPath);
+    },
+    [
+      setBinaryPath,
+      setBody,
+      setBodyFormFields,
+      setBodyType,
+      setHeaders,
+      setMethod,
+      setProtocol,
+      setQueryParams,
+      setQueryTrailingAmpersand,
+      setRawType,
+      setUrl,
+    ]
+  );
+
   return (
     <div className="request-builder">
       <div className="request-bar">
@@ -300,6 +350,16 @@ export function RequestBuilder({
             className="request-remark-input"
             aria-label="接口备注"
           />
+          <FastTooltip label="粘贴 cURL 命令并填充当前请求">
+            <button
+              type="button"
+              className="request-import-curl-btn"
+              onClick={() => setCurlImportModalOpen(true)}
+              aria-label="导入 cURL 命令"
+            >
+              导入 cURL
+            </button>
+          </FastTooltip>
           <FastTooltip label="根据当前请求生成 cURL 并复制（HTTP/SSE 可直接运行；WebSocket 为 wscat 示例注释）">
             <button
               type="button"
@@ -846,6 +906,15 @@ export function RequestBuilder({
         confirmLabel="填充 Body"
         onClose={() => setBodyImportModalOpen(false)}
         onConfirm={handleImportUrlEncodedBody}
+      />
+      <Modal
+        open={curlImportModalOpen}
+        title="导入 cURL 命令"
+        placeholder="curl -X POST ..."
+        confirmLabel="填充请求"
+        multiline
+        onClose={() => setCurlImportModalOpen(false)}
+        onConfirm={handleImportCurl}
       />
     </div>
   );

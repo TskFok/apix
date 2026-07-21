@@ -11,6 +11,7 @@ interface ModalProps {
   cancelLabel?: string;
   defaultValue?: string;
   placeholder?: string;
+  multiline?: boolean;
 }
 
 export function Modal({
@@ -22,8 +23,12 @@ export function Modal({
   cancelLabel = '取消',
   defaultValue = '',
   placeholder,
+  multiline = false,
 }: ModalProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
+  const setInputRef = (element: HTMLInputElement | HTMLTextAreaElement | null) => {
+    inputRef.current = element;
+  };
 
   useEscapeToClose(open, onClose);
 
@@ -47,15 +52,27 @@ export function Modal({
       <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
         <form onSubmit={handleSubmit}>
           <h3 className="modal-title">{title}</h3>
-          <input
-            ref={inputRef}
-            type="text"
-            className="modal-input"
-            autoCapitalize="off"
-            autoCorrect="off"
-            defaultValue={defaultValue}
-            placeholder={placeholder}
-          />
+          {multiline ? (
+            <textarea
+              ref={setInputRef}
+              className="modal-input"
+              autoCapitalize="off"
+              autoCorrect="off"
+              defaultValue={defaultValue}
+              placeholder={placeholder}
+              rows={8}
+            />
+          ) : (
+            <input
+              ref={setInputRef}
+              type="text"
+              className="modal-input"
+              autoCapitalize="off"
+              autoCorrect="off"
+              defaultValue={defaultValue}
+              placeholder={placeholder}
+            />
+          )}
           <div className="modal-actions">
             <button type="button" className="modal-btn modal-btn-cancel" onClick={onClose}>
               {cancelLabel}
