@@ -166,6 +166,12 @@ dependencies = []
   });
 });
 
+const DEFAULT_RUNTIME = {
+  platform: "linux",
+  nodePath: "/usr/bin/node",
+  npmExecPath: "/usr/lib/node_modules/npm/bin/npm-cli.js",
+};
+
 function releaseHarness(
   args,
   {
@@ -173,7 +179,8 @@ function releaseHarness(
     failOn,
     localTag = "",
     remoteTag = "",
-    runtime,
+    // 固定非 Windows runtime，避免 Windows CI 上误用宿主 process.platform / npm_execpath
+    runtime = DEFAULT_RUNTIME,
     state = {},
     status = "",
     syncResults = ["0\t0"],
@@ -362,6 +369,16 @@ describe("发布编排", () => {
 
     expect(calls).toContainEqual(["npm", "test"]);
     expect(calls).toContainEqual(["npm", "run", "build"]);
+  });
+
+  it("未指定 runtime 时默认走非 Windows npm 调用，不依赖宿主平台", () => {
+    const { calls } = releaseHarness([]);
+
+    expect(calls).toContainEqual(["npm", "test"]);
+    expect(calls).toContainEqual(["npm", "run", "build"]);
+    expect(calls.some(([command]) => command === DEFAULT_RUNTIME.nodePath)).toBe(
+      false,
+    );
   });
 
   it("预检只更新当前远端分支且不抓取标签", () => {
