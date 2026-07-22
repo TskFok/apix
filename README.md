@@ -157,17 +157,16 @@ npm run test:watch
 
 ## 发布
 
-发布脚本会校验工作区干净、同步项目版本号、提交版本文件、推送当前分支并创建版本 tag。版本 bump 的提交信息为 `chore: release v<version>`。tag 会触发 GitHub Release 工作流，发布页会使用 GitHub 自动生成的 release notes/changelog。
+发布脚本会先校验工作区干净且与远端同步，再跑本地测试与构建，然后同步项目版本号、提交版本文件、推送当前分支并创建版本 tag。版本 bump 的提交信息为 `chore: release v<version>`。tag 会触发 GitHub Release 工作流。
 
 ```bash
-# patch 版本
+# 默认递增 patch 版本
 npm run release
 
-# minor / major 版本
-npm run release -- minor
-npm run release -- major
+# 指定更高的稳定版本
+npm run release -- 1.2.0
 
-# 使用当前版本发布，仅推送分支并打 tag
+# 使用当前版本重新打 tag 并强推（用于重跑 Release）
 npm run release -- --current
 ```
 

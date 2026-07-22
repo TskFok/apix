@@ -43,7 +43,7 @@ test: 覆盖变量替换场景
 
 ## 版本发布
 
-`npm run release` 会 bump 版本并提交，提交信息固定为：
+`npm run release` 默认递增 patch；也可传入更高的稳定版本（如 `1.2.0`），或使用 `--current` 重发当前版本。提交信息固定为：
 
 ```
 chore: release v<version>
