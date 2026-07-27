@@ -863,6 +863,7 @@ export function RequestBuilder({
                 <textarea
                   autoCapitalize="off"
                   autoCorrect="off"
+                  spellCheck={false}
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
                   placeholder='{"key": "value"}'
