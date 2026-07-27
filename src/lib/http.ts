@@ -6,6 +6,8 @@ export interface HttpRequestOptions {
   url: string;
   headers?: Record<string, string>;
   body?: string | FormData | URLSearchParams | Uint8Array;
+  /** 是否跳过 TLS 证书校验，仅用于受信任的调试环境 */
+  ignoreTlsCertificateErrors?: boolean;
 }
 
 export interface HttpResponse {
@@ -35,7 +37,7 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 export async function sendHttpRequest(options: HttpRequestOptions): Promise<HttpResponse> {
-  const { method, url, headers = {}, body } = options;
+  const { method, url, headers = {}, body, ignoreTlsCertificateErrors = false } = options;
 
   const cleanHeaders: Record<string, string> = {};
   for (const [k, v] of Object.entries(headers)) {
@@ -69,6 +71,7 @@ export async function sendHttpRequest(options: HttpRequestOptions): Promise<Http
       url,
       headers: cleanHeaders,
       body_base64: bodyBase64 ?? null,
+      ignore_tls_certificate_errors: ignoreTlsCertificateErrors,
     },
   });
 

@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { readFile } from '@tauri-apps/plugin-fs';
 import { useRequestStore } from '../stores/requestStore';
 import { useResponseStore } from '../stores/responseStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import { sendHttpRequest, buildUrl } from '../lib/http';
 import { addHistory, updateHistory } from '../lib/db';
 import {
@@ -129,6 +130,8 @@ export function useHttpRequest() {
     try {
       const headers = { ...resolved.headers };
       const fullUrl = buildUrl(resolved.url, resolved.queryParams);
+      const ignoreTlsCertificateErrors =
+        useSettingsStore.getState().ignoreTlsCertificateErrors;
       resolvedUrl = fullUrl;
       resolvedHeaders = headers;
 
@@ -163,6 +166,7 @@ export function useHttpRequest() {
         url: fullUrl,
         headers,
         body: requestBody,
+        ignoreTlsCertificateErrors,
       });
 
       setHttpResponse({

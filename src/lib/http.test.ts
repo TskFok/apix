@@ -1,10 +1,50 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   buildUrl,
   buildDisplayUrl,
   buildDisplayUrlFromQueryFields,
   parseUrlToBaseAndParams,
+  sendHttpRequest,
 } from "./http";
+
+const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
+
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: invokeMock,
+}));
+
+describe('sendHttpRequest', () => {
+  it('启用忽略证书校验时将设置传递给 Tauri 命令', async () => {
+    invokeMock.mockResolvedValue({
+      status: 200,
+      status_text: 'OK',
+      headers: { 'content-type': 'application/json' },
+      body: '{"ok":true}',
+      time_ms: 12,
+    });
+
+    const response = await sendHttpRequest({
+      method: 'GET',
+      url: 'https://expired.example.test',
+      ignoreTlsCertificateErrors: true,
+    });
+
+    expect(response).toEqual({
+      status: 200,
+      statusText: 'OK',
+      headers: { 'content-type': 'application/json' },
+      body: '{"ok":true}',
+      timeMs: 12,
+    });
+    expect(invokeMock).toHaveBeenCalledWith('http_request', {
+      payload: expect.objectContaining({
+        method: 'GET',
+        url: 'https://expired.example.test',
+        ignore_tls_certificate_errors: true,
+      }),
+    });
+  });
+});
 
 describe("buildUrl", () => {
   it("无参数时返回原 URL", () => {
