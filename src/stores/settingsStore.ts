@@ -39,6 +39,9 @@ export interface SettingsState {
   /** 是否收集详细报错日志 */
   collectErrorLogs: boolean;
   setCollectErrorLogs: (enabled: boolean) => void;
+  /** 是否跳过 TLS 证书校验，仅用于受信任的调试环境 */
+  ignoreTlsCertificateErrors: boolean;
+  setIgnoreTlsCertificateErrors: (enabled: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -48,6 +51,9 @@ export const useSettingsStore = create<SettingsState>()(
       setIdleTimeoutMs: (idleTimeoutMs) => set({ idleTimeoutMs }),
       collectErrorLogs: false,
       setCollectErrorLogs: (collectErrorLogs) => set({ collectErrorLogs }),
+      ignoreTlsCertificateErrors: false,
+      setIgnoreTlsCertificateErrors: (ignoreTlsCertificateErrors) =>
+        set({ ignoreTlsCertificateErrors }),
     }),
     { name: SETTINGS_STORAGE_KEY, storage: createJSONStorage(getStorage) }
   )

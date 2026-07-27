@@ -36,4 +36,14 @@ describe('settingsStore', () => {
     useSettingsStore.getState().setCollectErrorLogs(true);
     expect(useSettingsStore.getState().collectErrorLogs).toBe(true);
   });
+
+  it('默认校验证书，并允许更新忽略证书校验设置', () => {
+    const state = useSettingsStore.getState();
+
+    expect(state.ignoreTlsCertificateErrors).toBe(false);
+
+    state.setIgnoreTlsCertificateErrors(true);
+
+    expect(useSettingsStore.getState().ignoreTlsCertificateErrors).toBe(true);
+  });
 });

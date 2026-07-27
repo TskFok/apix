@@ -137,6 +137,8 @@ function App() {
   const setIdleTimeoutMs = useSettingsStore((s) => s.setIdleTimeoutMs);
   const collectErrorLogs = useSettingsStore((s) => s.collectErrorLogs);
   const setCollectErrorLogs = useSettingsStore((s) => s.setCollectErrorLogs);
+  const ignoreTlsCertificateErrors = useSettingsStore((s) => s.ignoreTlsCertificateErrors);
+  const setIgnoreTlsCertificateErrors = useSettingsStore((s) => s.setIgnoreTlsCertificateErrors);
 
   const closeProjectGlobalsQuickEdit = useCallback(() => {
     setProjectGlobalsQuickEditOpen(false);
@@ -302,6 +304,28 @@ function App() {
               </span>
             </label>
           </FastTooltip>
+          {protocol === 'http' && (
+            <FastTooltip label="仅用于受信任的调试环境；开启后会忽略过期、自签名及主机名不匹配等证书错误">
+              <label className={`error-collect-label ${ignoreTlsCertificateErrors ? 'is-active' : ''}`}>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  aria-label="忽略证书校验"
+                  aria-checked={ignoreTlsCertificateErrors}
+                  className="error-collect-checkbox"
+                  checked={ignoreTlsCertificateErrors}
+                  onChange={(e) => setIgnoreTlsCertificateErrors(e.target.checked)}
+                />
+                <span className="error-collect-switch" aria-hidden="true">
+                  <span className="error-collect-switch-thumb" />
+                </span>
+                <span className="error-collect-text">忽略证书</span>
+                <span className="error-collect-state" aria-hidden="true">
+                  {ignoreTlsCertificateErrors ? '开' : '关'}
+                </span>
+              </label>
+            </FastTooltip>
+          )}
           {(protocol === 'ws' || protocol === 'sse') && (
             <label className="idle-timeout-label">
               <span className="idle-timeout-text">空闲超时</span>

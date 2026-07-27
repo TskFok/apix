@@ -85,6 +85,7 @@ describe('App', () => {
     });
     await useRequestStore.getState().newRequest();
     useSettingsStore.getState().setCollectErrorLogs(false);
+    useSettingsStore.getState().setIgnoreTlsCertificateErrors(false);
   });
 
   it('点击右上角环境打开项目全局快速编辑弹窗', async () => {
@@ -149,6 +150,18 @@ describe('App', () => {
     fireEvent.click(switchInput);
 
     expect(useSettingsStore.getState().collectErrorLogs).toBe(true);
+    expect(switchInput).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('在右上角切换忽略证书校验', () => {
+    render(<App />);
+
+    const switchInput = screen.getByRole('switch', { name: '忽略证书校验' });
+    expect(switchInput).toHaveAttribute('aria-checked', 'false');
+
+    fireEvent.click(switchInput);
+
+    expect(useSettingsStore.getState().ignoreTlsCertificateErrors).toBe(true);
     expect(switchInput).toHaveAttribute('aria-checked', 'true');
   });
 
