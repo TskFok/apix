@@ -8,6 +8,8 @@ struct HttpRequestPayload {
     url: String,
     headers: HashMap<String, String>,
     body_base64: Option<String>,
+    #[serde(default)]
+    ignore_tls_certificate_errors: bool,
 }
 
 #[derive(Serialize)]
@@ -19,13 +21,19 @@ struct HttpResponsePayload {
     time_ms: u64,
 }
 
+fn build_http_client(
+    ignore_tls_certificate_errors: bool,
+) -> Result<reqwest::Client, reqwest::Error> {
+    reqwest::Client::builder()
+        .danger_accept_invalid_certs(ignore_tls_certificate_errors)
+        .build()
+}
+
 #[tauri::command]
 async fn http_request(payload: HttpRequestPayload) -> Result<HttpResponsePayload, String> {
     let start = std::time::Instant::now();
 
-    let client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(false)
-        .build()
+    let client = build_http_client(payload.ignore_tls_certificate_errors)
         .map_err(|e| e.to_string())?;
 
     let method = payload
@@ -70,6 +78,26 @@ async fn http_request(payload: HttpRequestPayload) -> Result<HttpResponsePayload
         body,
         time_ms,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn http_request_payload_defaults_to_certificate_validation() {
+        let payload: HttpRequestPayload = serde_json::from_str(
+            r#"{"method":"GET","url":"https://example.com","headers":{},"body_base64":null}"#,
+        )
+        .unwrap();
+
+        assert!(!payload.ignore_tls_certificate_errors);
+    }
+
+    #[test]
+    fn builds_http_client_when_certificate_validation_is_ignored() {
+        assert!(build_http_client(true).is_ok());
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
