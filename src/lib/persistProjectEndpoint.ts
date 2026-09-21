@@ -10,17 +10,15 @@ export interface PersistableHttpResponse {
 }
 
 /**
- * HTTP 请求成功且当前为项目内接口（非历史/收藏抑制）时，将响应写入 api_endpoints。
+ * HTTP 请求成功且发起时关联项目接口时，将响应写入固定的 api_endpoints 目标。
  */
 export async function persistProjectHttpResponseIfNeeded(
+  endpointId: number | null,
   response: PersistableHttpResponse
 ): Promise<void> {
-  const s = useRequestStore.getState();
-  if (s.suppressPersistToProject || s.protocol !== 'http') return;
-  const id = s.currentEndpointId;
-  if (id == null) return;
+  if (endpointId == null) return;
   try {
-    await updateApiEndpoint(id, {
+    await updateApiEndpoint(endpointId, {
       response_status: response.status,
       response_time_ms: response.timeMs ?? null,
       response_headers: JSON.stringify(response.headers),
@@ -78,11 +76,15 @@ export function resolveFavoriteNameForUpdate(
  * 若当前请求已关联模块（侧栏项目树），将当前表单写入 api_endpoints。
  * 已有 endpointId 则更新（不修改接口名称）；否则插入并回写 endpointId。
  */
-export async function persistProjectEndpointIfNeeded(): Promise<void> {
+export async function persistProjectEndpointIfNeeded(): Promise<number | null> {
   const s = useRequestStore.getState();
-  if (s.suppressPersistToProject) return;
+  const existingResponseEndpointId =
+    !s.suppressPersistToProject && s.protocol === 'http'
+      ? s.currentEndpointId
+      : null;
+  if (s.suppressPersistToProject) return null;
   const moduleId = s.currentModuleId;
-  if (moduleId == null || !s.url.trim()) return;
+  if (moduleId == null || !s.url.trim()) return existingResponseEndpointId;
 
   const protocol = s.protocol;
   const method = protocol === 'http' ? s.method : null;
@@ -103,6 +105,7 @@ export async function persistProjectEndpointIfNeeded(): Promise<void> {
         params,
         body,
       });
+      return existingResponseEndpointId;
     } else {
       const name = resolveEndpointDisplayName(s.url, remark);
       const id = await addApiEndpoint(moduleId, name, protocol, method, s.url, headers, params, body);
@@ -111,18 +114,39 @@ export async function persistProjectEndpointIfNeeded(): Promise<void> {
         const mod = await getModuleById(moduleId);
         projectId = mod?.project_id ?? null;
       }
-      if (projectId != null) {
-        await s.setProjectContext({
-          projectId,
-          moduleId,
-          endpointId: id,
-          globalConfig: s.projectGlobalConfig ?? { headers: [], variables: [] },
+      const current = useRequestStore.getState();
+      const originalDraftStillSelected =
+        current.currentProjectId === s.currentProjectId &&
+        current.currentModuleId === moduleId &&
+        current.currentEndpointId === s.currentEndpointId &&
+        current.currentHistoryId === s.currentHistoryId &&
+        current.currentFavoriteId === s.currentFavoriteId &&
+        current.suppressPersistToProject === s.suppressPersistToProject &&
+        current.protocol === protocol &&
+        current.method === s.method &&
+        current.url === s.url &&
+        current.endpointRemark === remark &&
+        current.getHeadersForStorage() === headers &&
+        current.getParamsForStorage() === params &&
+        current.getBodyForStorage() === body;
+      if (projectId != null && originalDraftStillSelected) {
+        useRequestStore.setState({
+          mainWorkspace: 'request',
+          currentProjectId: projectId,
+          currentModuleId: moduleId,
+          currentEndpointId: id,
+          projectGlobalConfig: s.projectGlobalConfig ?? { headers: [], variables: [] },
+          suppressPersistToProject: false,
+          currentFavoriteId: null,
         });
         useResponseStore.getState().setPendingTreeExpand({ projectId, moduleId });
       }
+      return protocol === 'http' ? id : null;
     }
-    useResponseStore.getState().refreshProjects();
   } catch (e) {
     console.error('persistProjectEndpointIfNeeded', e);
+    return existingResponseEndpointId;
+  } finally {
+    useResponseStore.getState().refreshProjects();
   }
 }

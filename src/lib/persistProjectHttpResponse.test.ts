@@ -1,15 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as db from './db';
 
-const { getStateRequest, refreshProjects } = vi.hoisted(() => ({
-  getStateRequest: vi.fn(),
+const { refreshProjects } = vi.hoisted(() => ({
   refreshProjects: vi.fn(),
-}));
-
-vi.mock('../stores/requestStore', () => ({
-  useRequestStore: {
-    getState: () => getStateRequest(),
-  },
 }));
 
 vi.mock('../stores/responseStore', () => ({
@@ -26,13 +19,8 @@ describe('persistProjectHttpResponseIfNeeded', () => {
     vi.spyOn(db, 'updateApiEndpoint').mockResolvedValue(undefined);
   });
 
-  it('suppressPersistToProject 时不写入', async () => {
-    getStateRequest.mockReturnValue({
-      suppressPersistToProject: true,
-      protocol: 'http',
-      currentEndpointId: 1,
-    });
-    await persistProjectHttpResponseIfNeeded({
+  it('无发起时 endpointId 时不写入', async () => {
+    await persistProjectHttpResponseIfNeeded(null, {
       status: 200,
       headers: {},
       body: 'ok',
@@ -40,33 +28,8 @@ describe('persistProjectHttpResponseIfNeeded', () => {
     expect(db.updateApiEndpoint).not.toHaveBeenCalled();
   });
 
-  it('非 http 协议不写入', async () => {
-    getStateRequest.mockReturnValue({
-      suppressPersistToProject: false,
-      protocol: 'ws',
-      currentEndpointId: 1,
-    });
-    await persistProjectHttpResponseIfNeeded({ status: 200, headers: {}, body: 'x' });
-    expect(db.updateApiEndpoint).not.toHaveBeenCalled();
-  });
-
-  it('无 endpointId 不写入', async () => {
-    getStateRequest.mockReturnValue({
-      suppressPersistToProject: false,
-      protocol: 'http',
-      currentEndpointId: null,
-    });
-    await persistProjectHttpResponseIfNeeded({ status: 200, headers: {}, body: 'x' });
-    expect(db.updateApiEndpoint).not.toHaveBeenCalled();
-  });
-
-  it('项目内 http 成功时更新响应列并刷新树', async () => {
-    getStateRequest.mockReturnValue({
-      suppressPersistToProject: false,
-      protocol: 'http',
-      currentEndpointId: 42,
-    });
-    await persistProjectHttpResponseIfNeeded({
+  it('按发起时 endpointId 更新响应列并刷新树', async () => {
+    await persistProjectHttpResponseIfNeeded(42, {
       status: 201,
       headers: { 'content-type': 'application/json' },
       body: '{"a":1}',

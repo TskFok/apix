@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { readFile } from '@tauri-apps/plugin-fs';
 import { useRequestStore } from '../stores/requestStore';
 import { useResponseStore } from '../stores/responseStore';
@@ -12,6 +12,56 @@ import {
 import { persistFavoriteDraftIfNeeded, resolveRemarkForHistoryPersistence } from '../lib/historyFavoritePersist';
 import { appendErrorLog } from '../lib/errorLog';
 import type { BodyFormField, BodyType, HttpMethod } from '../types';
+
+interface HttpRequestSnapshot {
+  method: HttpMethod;
+  url: string;
+  bodyType: BodyType;
+  rawType: string;
+  endpointRemark: string;
+  currentHistoryId: number | null;
+  currentFavoriteId: number | null;
+  suppressPersistToProject: boolean;
+  currentProjectId: number | null;
+  currentModuleId: number | null;
+  currentEndpointId: number | null;
+  headersForStorage: string;
+  paramsForStorage: string;
+  bodyForStorage: string;
+}
+
+function isSnapshotStillSelected(
+  snapshot: HttpRequestSnapshot,
+  selectedEndpointId: number | null
+): boolean {
+  const current = useRequestStore.getState();
+  return (
+    current.protocol === 'http' &&
+    current.method === snapshot.method &&
+    current.url === snapshot.url &&
+    current.currentHistoryId === snapshot.currentHistoryId &&
+    current.currentFavoriteId === snapshot.currentFavoriteId &&
+    current.suppressPersistToProject === snapshot.suppressPersistToProject &&
+    current.currentProjectId === snapshot.currentProjectId &&
+    current.currentModuleId === snapshot.currentModuleId &&
+    current.currentEndpointId === selectedEndpointId
+  );
+}
+
+async function enqueueLatestTargetWrite(
+  latestRequestByTarget: Map<number, number>,
+  targetId: number,
+  requestId: number,
+  persistTailRef: { current: Promise<void> },
+  write: () => Promise<void>
+): Promise<void> {
+  const queuedWrite = persistTailRef.current.then(async () => {
+    if (latestRequestByTarget.get(targetId) !== requestId) return;
+    await write();
+  });
+  persistTailRef.current = queuedWrite.catch(() => {});
+  await queuedWrite;
+}
 
 function getFieldFiles(field: {
   type?: string;
@@ -103,29 +153,72 @@ function getContentTypeForRaw(rawType: string): string {
 }
 
 export function useHttpRequest() {
-  const { getHeadersForStorage, getParamsForStorage, getBodyForStorage } = useRequestStore();
   const setHttpResponse = useResponseStore((s) => s.setHttpResponse);
   const refreshHistory = useResponseStore((s) => s.refreshHistory);
   const refreshFavorites = useResponseStore((s) => s.refreshFavorites);
+  const latestRequestIdRef = useRef(0);
+  const latestProjectRequestByEndpointRef = useRef(new Map<number, number>());
+  const latestHistoryRequestByIdRef = useRef(new Map<number, number>());
+  const latestFavoriteRequestByIdRef = useRef(new Map<number, number>());
+  const projectResponsePersistTailRef = useRef<Promise<void>>(Promise.resolve());
+  const historyFavoritePersistTailRef = useRef<Promise<void>>(Promise.resolve());
 
   const send = useCallback(async () => {
+    const requestState = useRequestStore.getState();
     const {
       method,
       url,
       bodyType,
       rawType,
-    } = useRequestStore.getState();
+    } = requestState;
     let resolvedUrl = url;
     let resolvedHeaders: Record<string, string> = {};
 
     if (!url.trim()) return;
 
-    await persistProjectEndpointIfNeeded();
-
-    const resolved = useRequestStore.getState().getResolvedForSend();
+    const resolved = requestState.getResolvedForSend();
     if (!resolved.url.trim()) return;
 
+    const requestId = ++latestRequestIdRef.current;
+    const snapshot: HttpRequestSnapshot = {
+      method,
+      url,
+      bodyType,
+      rawType,
+      endpointRemark: requestState.endpointRemark,
+      currentHistoryId: requestState.currentHistoryId,
+      currentFavoriteId: requestState.currentFavoriteId,
+      suppressPersistToProject: requestState.suppressPersistToProject,
+      currentProjectId: requestState.currentProjectId,
+      currentModuleId: requestState.currentModuleId,
+      currentEndpointId: requestState.currentEndpointId,
+      headersForStorage: requestState.getHeadersForStorage(),
+      paramsForStorage: requestState.getParamsForStorage(),
+      bodyForStorage: requestState.getBodyForStorage(),
+    };
+
+    if (
+      !snapshot.suppressPersistToProject &&
+      snapshot.currentEndpointId != null
+    ) {
+      latestProjectRequestByEndpointRef.current.set(snapshot.currentEndpointId, requestId);
+    }
+    if (snapshot.currentHistoryId != null) {
+      latestHistoryRequestByIdRef.current.set(snapshot.currentHistoryId, requestId);
+    } else if (snapshot.currentFavoriteId != null) {
+      latestFavoriteRequestByIdRef.current.set(snapshot.currentFavoriteId, requestId);
+    }
+
     setHttpResponse({ loading: true, error: undefined });
+
+    const responseEndpointId = await persistProjectEndpointIfNeeded();
+    const selectedEndpointId = responseEndpointId ?? snapshot.currentEndpointId;
+    if (responseEndpointId != null) {
+      const previousRequestId = latestProjectRequestByEndpointRef.current.get(responseEndpointId) ?? 0;
+      if (requestId > previousRequestId) {
+        latestProjectRequestByEndpointRef.current.set(responseEndpointId, requestId);
+      }
+    }
 
     try {
       const headers = { ...resolved.headers };
@@ -169,60 +262,97 @@ export function useHttpRequest() {
         ignoreTlsCertificateErrors,
       });
 
-      setHttpResponse({
-        status: res.status,
-        statusText: res.statusText,
-        headers: res.headers,
-        body: res.body,
-        timeMs: res.timeMs,
-        loading: false,
-      });
+      if (latestRequestIdRef.current === requestId) {
+        if (isSnapshotStillSelected(snapshot, selectedEndpointId)) {
+          setHttpResponse({
+            status: res.status,
+            statusText: res.statusText,
+            headers: res.headers,
+            body: res.body,
+            timeMs: res.timeMs,
+            loading: false,
+          });
+        } else {
+          setHttpResponse({ loading: false });
+        }
+      }
 
-      await persistProjectHttpResponseIfNeeded({
-        status: res.status,
-        headers: res.headers,
-        body: res.body,
-        timeMs: res.timeMs,
-      });
+      if (
+        responseEndpointId != null &&
+        latestProjectRequestByEndpointRef.current.get(responseEndpointId) === requestId
+      ) {
+        const response = {
+          status: res.status,
+          headers: res.headers,
+          body: res.body,
+          timeMs: res.timeMs,
+        };
+        await enqueueLatestTargetWrite(
+          latestProjectRequestByEndpointRef.current,
+          responseEndpointId,
+          requestId,
+          projectResponsePersistTailRef,
+          () => persistProjectHttpResponseIfNeeded(responseEndpointId, response)
+        );
+      }
 
-      const stAfter = useRequestStore.getState();
-      const remark = await resolveRemarkForHistoryPersistence(stAfter.currentHistoryId, stAfter.endpointRemark);
-      if (stAfter.currentHistoryId != null) {
-        await updateHistory(
-          stAfter.currentHistoryId,
-          'http',
-          method,
-          url,
-          getHeadersForStorage(),
-          getParamsForStorage(),
-          getBodyForStorage(),
-          res.status,
-          res.timeMs,
-          JSON.stringify(res.headers),
-          res.body,
-          remark
+      if (snapshot.currentHistoryId != null) {
+        await enqueueLatestTargetWrite(
+          latestHistoryRequestByIdRef.current,
+          snapshot.currentHistoryId,
+          requestId,
+          historyFavoritePersistTailRef,
+          async () => {
+            const remark = await resolveRemarkForHistoryPersistence(
+              snapshot.currentHistoryId,
+              snapshot.endpointRemark
+            );
+            await updateHistory(
+              snapshot.currentHistoryId!,
+              'http',
+              method,
+              url,
+              snapshot.headersForStorage,
+              snapshot.paramsForStorage,
+              snapshot.bodyForStorage,
+              res.status,
+              res.timeMs,
+              JSON.stringify(res.headers),
+              res.body,
+              remark
+            );
+          }
         );
       } else {
-        await persistFavoriteDraftIfNeeded(
-          stAfter.currentFavoriteId,
-          {
-            url,
-            protocol: 'http',
-            method,
-            headers: getHeadersForStorage(),
-            params: getParamsForStorage(),
-            body: getBodyForStorage(),
-            endpointRemark: stAfter.endpointRemark,
-          },
-          refreshFavorites
-        );
+        if (snapshot.currentFavoriteId != null) {
+          await enqueueLatestTargetWrite(
+            latestFavoriteRequestByIdRef.current,
+            snapshot.currentFavoriteId,
+            requestId,
+            historyFavoritePersistTailRef,
+            () => persistFavoriteDraftIfNeeded(
+              snapshot.currentFavoriteId,
+              {
+                url,
+                protocol: 'http',
+                method,
+                headers: snapshot.headersForStorage,
+                params: snapshot.paramsForStorage,
+                body: snapshot.bodyForStorage,
+                endpointRemark: snapshot.endpointRemark,
+              },
+              refreshFavorites
+            )
+          );
+        }
+        const remark = await resolveRemarkForHistoryPersistence(null, snapshot.endpointRemark);
         await addHistory(
           'http',
           method,
           url,
-          getHeadersForStorage(),
-          getParamsForStorage(),
-          getBodyForStorage(),
+          snapshot.headersForStorage,
+          snapshot.paramsForStorage,
+          snapshot.bodyForStorage,
           res.status,
           res.timeMs,
           JSON.stringify(res.headers),
@@ -240,48 +370,73 @@ export function useHttpRequest() {
         rawType,
         headers: resolvedHeaders,
       });
-      setHttpResponse({
-        loading: false,
-        error: err instanceof Error ? err.message : String(err),
-      });
-      const stErr = useRequestStore.getState();
-      const remarkErr = await resolveRemarkForHistoryPersistence(stErr.currentHistoryId, stErr.endpointRemark);
-      if (stErr.currentHistoryId != null) {
-        await updateHistory(
-          stErr.currentHistoryId,
-          'http',
-          method,
-          url,
-          getHeadersForStorage(),
-          getParamsForStorage(),
-          getBodyForStorage(),
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          remarkErr
+      if (latestRequestIdRef.current === requestId) {
+        if (isSnapshotStillSelected(snapshot, selectedEndpointId)) {
+          setHttpResponse({
+            loading: false,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        } else {
+          setHttpResponse({ loading: false });
+        }
+      }
+      if (snapshot.currentHistoryId != null) {
+        await enqueueLatestTargetWrite(
+          latestHistoryRequestByIdRef.current,
+          snapshot.currentHistoryId,
+          requestId,
+          historyFavoritePersistTailRef,
+          async () => {
+            const remarkErr = await resolveRemarkForHistoryPersistence(
+              snapshot.currentHistoryId,
+              snapshot.endpointRemark
+            );
+            await updateHistory(
+              snapshot.currentHistoryId!,
+              'http',
+              method,
+              url,
+              snapshot.headersForStorage,
+              snapshot.paramsForStorage,
+              snapshot.bodyForStorage,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              remarkErr
+            );
+          }
         );
       } else {
-        await persistFavoriteDraftIfNeeded(
-          stErr.currentFavoriteId,
-          {
-            url,
-            protocol: 'http',
-            method,
-            headers: getHeadersForStorage(),
-            params: getParamsForStorage(),
-            body: getBodyForStorage(),
-            endpointRemark: stErr.endpointRemark,
-          },
-          refreshFavorites
-        );
+        if (snapshot.currentFavoriteId != null) {
+          await enqueueLatestTargetWrite(
+            latestFavoriteRequestByIdRef.current,
+            snapshot.currentFavoriteId,
+            requestId,
+            historyFavoritePersistTailRef,
+            () => persistFavoriteDraftIfNeeded(
+              snapshot.currentFavoriteId,
+              {
+                url,
+                protocol: 'http',
+                method,
+                headers: snapshot.headersForStorage,
+                params: snapshot.paramsForStorage,
+                body: snapshot.bodyForStorage,
+                endpointRemark: snapshot.endpointRemark,
+              },
+              refreshFavorites
+            )
+          );
+        }
+        const remarkErr = await resolveRemarkForHistoryPersistence(null, snapshot.endpointRemark);
         await addHistory(
           'http',
           method,
           url,
-          getHeadersForStorage(),
-          getParamsForStorage(),
-          getBodyForStorage(),
+          snapshot.headersForStorage,
+          snapshot.paramsForStorage,
+          snapshot.bodyForStorage,
           undefined,
           undefined,
           undefined,
@@ -291,7 +446,7 @@ export function useHttpRequest() {
       }
       refreshHistory();
     }
-  }, [getHeadersForStorage, getParamsForStorage, getBodyForStorage, setHttpResponse, refreshHistory, refreshFavorites]);
+  }, [setHttpResponse, refreshHistory, refreshFavorites]);
 
   return { send };
 }

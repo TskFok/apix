@@ -170,6 +170,15 @@ describe('ProjectTreePanel', () => {
     expect(screen.getByRole('button', { name: '重命名项目' })).not.toHaveAttribute('title');
   });
 
+  it('HTML 导出弹窗说明敏感内容与真实响应会被安全省略', async () => {
+    render(<ProjectTreePanel />);
+    fireEvent.click(await screen.findByRole('button', { name: '导出接口文档 HTML' }));
+
+    expect(await screen.findByRole('dialog', { name: /导出接口文档 HTML/ })).toHaveTextContent(
+      '接口文档会脱敏认证与常见敏感字段，并省略最近响应内容和非结构化请求体'
+    );
+  });
+
   it('项目树搜索栏上方区域固定在列表滚动容器之外', async () => {
     const { container } = render(<ProjectTreePanel />);
     expect(await screen.findByText('测试项目')).toBeInTheDocument();

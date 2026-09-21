@@ -9,6 +9,7 @@ import {
   updateApiEndpoint,
   updateProject,
 } from './db';
+import { parseProjectGlobalConfig, serializeProjectGlobalConfig } from './projectMerge';
 
 export const APIX_PROJECT_EXPORT_FORMAT = 'apix-project' as const;
 export const APIX_PROJECT_EXPORT_VERSION = 1;
@@ -81,6 +82,10 @@ export type BuildProjectExportOptions = {
   moduleIds?: number[];
 };
 
+function normalizeProjectGlobalConfigForTransfer(globalConfig: string): string {
+  return serializeProjectGlobalConfig(parseProjectGlobalConfig(globalConfig));
+}
+
 /** 构建可 JSON 序列化的项目导出对象 */
 export async function buildProjectExportPayload(
   projectId: number,
@@ -115,14 +120,24 @@ export async function buildProjectExportPayload(
     exportedAt: Date.now(),
     project: {
       name: proj.name,
-      global_config: proj.global_config,
+      global_config: normalizeProjectGlobalConfigForTransfer(proj.global_config),
     },
     modules: modulesOut,
   };
 }
 
 export function serializeProjectExport(payload: ApixProjectExportFile): string {
-  return JSON.stringify(payload, null, 2);
+  return JSON.stringify(
+    {
+      ...payload,
+      project: {
+        ...payload.project,
+        global_config: normalizeProjectGlobalConfigForTransfer(payload.project.global_config),
+      },
+    },
+    null,
+    2
+  );
 }
 
 export class ProjectImportError extends Error {
@@ -225,7 +240,7 @@ export function parseProjectExportJson(text: string): ApixProjectExportFile {
     exportedAt: typeof r.exportedAt === 'number' ? r.exportedAt : Date.now(),
     project: {
       name: p.name.trim(),
-      global_config: p.global_config,
+      global_config: normalizeProjectGlobalConfigForTransfer(p.global_config),
     },
     modules,
   };
@@ -273,7 +288,9 @@ export async function importProjectAsNew(payload: ApixProjectExportFile): Promis
   const name = await uniqueProjectName(payload.project.name);
   const projectId = await addProject(name);
   if (projectId <= 0) throw new ProjectImportError('创建项目失败');
-  await updateProject(projectId, { global_config: payload.project.global_config });
+  await updateProject(projectId, {
+    global_config: normalizeProjectGlobalConfigForTransfer(payload.project.global_config),
+  });
   for (const m of payload.modules) {
     const moduleId = await addModule(projectId, m.name, m.sort_order);
     if (moduleId <= 0) continue;

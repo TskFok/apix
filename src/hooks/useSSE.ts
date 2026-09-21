@@ -1,5 +1,4 @@
 import { useCallback, useRef } from 'react';
-import { fetch } from '@tauri-apps/plugin-http';
 import { useRequestStore } from '../stores/requestStore';
 import { useResponseStore } from '../stores/responseStore';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -9,6 +8,7 @@ import { SSEParser } from '../lib/sse';
 import { persistProjectEndpointIfNeeded } from '../lib/persistProjectEndpoint';
 import { persistFavoriteDraftIfNeeded, resolveRemarkForHistoryPersistence } from '../lib/historyFavoritePersist';
 import { appendErrorLog } from '../lib/errorLog';
+import { openSSERequest } from '../lib/sseRequest';
 
 let abortController: AbortController | null = null;
 let sseIdleCheckInterval: ReturnType<typeof setInterval> | null = null;
@@ -49,11 +49,7 @@ export function useSSE() {
         ...resolved.headers,
       };
 
-      const response = await fetch(fullUrl, {
-        method: 'GET',
-        headers,
-        signal: abortController.signal,
-      });
+      const response = await openSSERequest(fullUrl, headers, abortController.signal);
 
       if (response.status >= 400) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);

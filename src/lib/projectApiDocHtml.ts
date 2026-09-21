@@ -2,14 +2,16 @@ import type { ApixExportedEndpoint, ApixProjectExportFile } from './projectImpor
 import { keyValueFieldsToRecord, type ResolvedForSend } from './projectMerge';
 import { buildUrl } from './http';
 import { buildCurlCommandFromRequest } from './buildCurlCommand';
+import { sanitizeEndpointForApiDoc } from './projectExportSanitizer';
 import type { BodyFormField, BodyType, HttpMethod, KeyValueField, RawType } from '../types';
 
 /**
  * 与 Apix 发送 HTTP/WS/SSE 时一致：地址栏 URL + Params 表（有非空值的键）合并为最终查询串。
  */
 export function endpointEffectiveRequestUrl(ep: ApixExportedEndpoint): string {
-  const q = keyValueFieldsToRecord(parseKvFields(ep.params));
-  return buildUrl(ep.url.trim(), q);
+  const safe = sanitizeEndpointForApiDoc(ep);
+  const q = keyValueFieldsToRecord(parseKvFields(safe.params));
+  return buildUrl(safe.url.trim(), q);
 }
 
 function parseMethodForCurl(ep: ApixExportedEndpoint): HttpMethod {
@@ -32,13 +34,14 @@ function endpointToResolvedForCurl(ep: ApixExportedEndpoint): ResolvedForSend {
   };
 }
 
-/** 与 Apix 内「复制 cURL」等价（无项目全局变量替换；文档场景下发请求一致字段）。 */
+/** 为文档生成脱敏 cURL 示例；不修改客户端正常复制命令的行为。 */
 export function buildEndpointDocCurl(ep: ApixExportedEndpoint): string {
-  const parsed = parseBodyJson(ep.body);
+  const safe = sanitizeEndpointForApiDoc(ep);
+  const parsed = parseBodyJson(safe.body);
   return buildCurlCommandFromRequest({
-    protocol: ep.protocol as 'http' | 'ws' | 'sse',
-    method: parseMethodForCurl(ep),
-    resolved: endpointToResolvedForCurl(ep),
+    protocol: safe.protocol as 'http' | 'ws' | 'sse',
+    method: parseMethodForCurl(safe),
+    resolved: endpointToResolvedForCurl(safe),
     bodyType: parsed?.bodyType ?? 'raw',
     rawType: parsed?.rawType ?? 'json',
   });
@@ -79,6 +82,7 @@ interface ParsedBody {
   body: string;
   rawType: RawType;
   binaryPath?: string;
+  exportBodyOmittedForSafety?: boolean;
 }
 
 function parseBodyJson(body: string | null | undefined): ParsedBody | null {
@@ -91,6 +95,7 @@ function parseBodyJson(body: string | null | undefined): ParsedBody | null {
       body: typeof o.body === 'string' ? o.body : '',
       rawType: (o.rawType as RawType) ?? 'json',
       binaryPath: typeof o.binaryPath === 'string' ? o.binaryPath : undefined,
+      exportBodyOmittedForSafety: o.exportBodyOmittedForSafety === true,
     };
   } catch {
     return null;
@@ -148,8 +153,11 @@ function kvTable(fields: KeyValueField[], caption: string): string {
 function bodySection(body: string | null): string {
   const parsed = parseBodyJson(body);
   if (!parsed) return '';
-  const { bodyType, bodyFormFields, body: raw, rawType, binaryPath } = parsed;
+  const { bodyType, bodyFormFields, body: raw, rawType, binaryPath, exportBodyOmittedForSafety } = parsed;
   if (bodyType === 'raw') {
+    if (exportBodyOmittedForSafety) {
+      return `<p class="muted">Body：raw（${escapeHtml(rawType)}）— 内容因安全原因已省略</p>`;
+    }
     if (!raw.trim()) return `<p class="muted">Body：raw（${escapeHtml(rawType)}）— 空</p>`;
     return `<h4 class="sub">Body（raw · ${escapeHtml(rawType)}）</h4><pre class="code">${escapeHtml(raw)}</pre>`;
   }
@@ -183,8 +191,8 @@ function urlBlockWithCopyButtons(mergedUrl: string, ep: ApixExportedEndpoint): s
   const curlAttr = escapeHtmlAttr(curl);
   return `<div class="url-block">
 <div class="url-toolbar">
-<button type="button" class="copy-url-btn" data-url="${urlAttr}" aria-label="复制完整 URL（已含 Params 查询参数）" title="复制完整 URL（已合并地址栏与 Params 表）">复制 URL</button>
-<button type="button" class="copy-curl-btn" data-curl="${curlAttr}" aria-label="复制 cURL 命令" title="复制与 Apix 等价的 cURL（合并 URL、Headers、Body）">复制 cURL</button>
+<button type="button" class="copy-url-btn" data-url="${urlAttr}" aria-label="复制完整 URL（已含 Params 查询参数）" title="复制脱敏 URL（已合并地址栏与 Params 表）">复制 URL</button>
+<button type="button" class="copy-curl-btn" data-curl="${curlAttr}" aria-label="复制 cURL 命令" title="复制脱敏 cURL 示例（使用前请填写认证信息）">复制 cURL</button>
 </div>
 <pre class="url code break-all">${escapeHtml(mergedUrl)}</pre>
 </div>`;
@@ -196,21 +204,6 @@ function hasStoredHttpResponse(ep: ApixExportedEndpoint): boolean {
   if (ep.response_headers?.trim()) return true;
   if (ep.response_body != null && ep.response_body.trim()) return true;
   return false;
-}
-
-function parseResponseHeadersRecord(json: string | null | undefined): Record<string, string> | null {
-  if (json == null || !String(json).trim()) return null;
-  try {
-    const o = JSON.parse(json) as unknown;
-    if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
-    const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(o as Record<string, unknown>)) {
-      out[String(k)] = v == null ? '' : String(v);
-    }
-    return out;
-  } catch {
-    return null;
-  }
 }
 
 /** 最近一次 HTTP 响应（Apix 持久化字段）的 HTML 片段；无数据时返回空串 */
@@ -226,27 +219,7 @@ export function buildLastResponseDocSection(ep: ApixExportedEndpoint): string {
     blocks.push(`<p class="resp-meta">${escapeHtml(metaBits.join(' · '))}</p>`);
   }
 
-  const headers = parseResponseHeadersRecord(ep.response_headers);
-  if (headers && Object.keys(headers).length > 0) {
-    const rows = Object.entries(headers)
-      .map(
-        ([k, v]) =>
-          `<tr><td><code>${escapeHtml(k)}</code></td><td class="break-all">${escapeHtml(v)}</td></tr>`
-      )
-      .join('');
-    blocks.push(
-      `<h4 class="sub">响应头</h4><table class="kv"><thead><tr><th>名称</th><th>值</th></tr></thead><tbody>${rows}</tbody></table>`
-    );
-  } else if (ep.response_headers?.trim()) {
-    blocks.push(
-      `<h4 class="sub">响应头</h4><pre class="code">${escapeHtml(ep.response_headers!)}</pre>`
-    );
-  }
-
-  const bodyRaw = ep.response_body ?? '';
-  if (bodyRaw.trim()) {
-    blocks.push(`<h4 class="sub">响应体</h4><pre class="code">${escapeHtml(bodyRaw)}</pre>`);
-  }
+  blocks.push('<p class="muted">响应头与响应体因安全原因已省略。</p>');
 
   if (blocks.length === 0) return '';
 
@@ -283,30 +256,31 @@ function urlBreakdownHtml(url: string): string {
 }
 
 function endpointArticle(ep: ApixExportedEndpoint, moduleName: string): string {
-  const method = (ep.protocol === 'http' ? ep.method ?? 'GET' : ep.method ?? '—').toUpperCase();
-  const headers = parseKvFields(ep.headers);
-  const params = parseKvFields(ep.params);
+  const safe = sanitizeEndpointForApiDoc(ep);
+  const method = (safe.protocol === 'http' ? safe.method ?? 'GET' : safe.method ?? '—').toUpperCase();
+  const headers = parseKvFields(safe.headers);
+  const params = parseKvFields(safe.params);
   const hdrBlock = kvTable(headers, 'Headers');
   const paramBlock = kvTable(params, 'Query 参数表（Apix Params 页；与地址栏合并规则以客户端为准）');
-  const bodyBlock = ep.protocol === 'http' ? bodySection(ep.body) : '';
+  const bodyBlock = safe.protocol === 'http' ? bodySection(safe.body) : '';
   const lastResp = buildLastResponseDocSection(ep);
 
-  const mergedUrl = endpointEffectiveRequestUrl(ep);
+  const mergedUrl = endpointEffectiveRequestUrl(safe);
 
-  if (ep.protocol !== 'http') {
+  if (safe.protocol !== 'http') {
     return `<article class="endpoint stream">
-<header><span class="pill">${escapeHtml(ep.protocol)}</span><h3>${escapeHtml(ep.name)}</h3></header>
+<header><span class="pill">${escapeHtml(safe.protocol)}</span><h3>${escapeHtml(safe.name)}</h3></header>
 <p><strong>地址</strong></p>
-${urlBlockWithCopyButtons(mergedUrl, ep)}
+${urlBlockWithCopyButtons(mergedUrl, safe)}
 <p class="muted">已与 Params 表合并；本文档以 HTTP 为主，WebSocket / SSE 请在 Apix 内调试。</p>
 ${lastResp}
 </article>`;
   }
 
   return `<article class="endpoint">
-<header><span class="method ${escapeHtml(method.toLowerCase())}">${escapeHtml(method)}</span><h3>${escapeHtml(ep.name)}</h3><span class="mod-tag">${escapeHtml(moduleName)}</span></header>
-<p class="url-label">完整 URL（地址栏 + Params 表合并，与发送一致）</p>
-${urlBlockWithCopyButtons(mergedUrl, ep)}
+<header><span class="method ${escapeHtml(method.toLowerCase())}">${escapeHtml(method)}</span><h3>${escapeHtml(safe.name)}</h3><span class="mod-tag">${escapeHtml(moduleName)}</span></header>
+<p class="url-label">完整 URL（地址栏 + Params 表合并，敏感字段已脱敏）</p>
+${urlBlockWithCopyButtons(mergedUrl, safe)}
 ${urlBreakdownHtml(mergedUrl)}
 ${hdrBlock}
 ${paramBlock}
@@ -480,6 +454,7 @@ export function buildProjectApiDocHtml(payload: ApixProjectExportFile): string {
   <header class="doc-head">
     <h1>${title}</h1>
     <p class="meta">由 Apix 导出 · ${escapeHtml(exported)} · 共 <strong>${httpCount}</strong> 条 HTTP 接口。本文档按「完整 URL + 查询参数」展示，适合 <code>api.php?s=模块/动作</code> 等入口，无需按 REST 路径拆分。</p>
+    <p class="meta">常见敏感字段已脱敏，真实响应内容与非结构化请求体已省略。URL 和 cURL 为文档示例，使用前请填写所需认证信息。</p>
   </header>
   <nav class="toc">
     <h2>目录</h2>

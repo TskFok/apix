@@ -782,10 +782,17 @@ export function ProjectTreePanel() {
               {exportPicker.kind === 'json' ? '导出项目 JSON' : '导出接口文档 HTML'} · {exportPicker.projectName}
             </h3>
             <p className="project-export-hint muted">
-              项目全局 Headers 与变量会始终包含在导出内容中。请勾选要导出的模块：
+              {exportPicker.kind === 'json'
+                ? 'JSON 用于备份，包含全部环境配置、请求与最近响应的真实值；旧版隐藏认证字段会移除。'
+                : '接口文档会脱敏认证与常见敏感字段，并省略最近响应内容和非结构化请求体。'}
+              请勾选要导出的模块：
             </p>
             {exportPicker.modules.length === 0 ? (
-              <p className="muted">该项目下暂无模块，将仅导出项目名称与全局配置。</p>
+              <p className="muted">
+                {exportPicker.kind === 'json'
+                  ? '该项目下暂无模块，将仅导出项目名称与移除旧版认证字段后的全局配置。'
+                  : '该项目下暂无模块，将生成仅含项目名称的接口文档。'}
+              </p>
             ) : (
               <>
                 <div className="project-export-bulk">

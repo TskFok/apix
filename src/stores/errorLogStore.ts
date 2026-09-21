@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { useSettingsStore } from './settingsStore';
+import { sanitizeErrorLogEntry } from '../lib/errorLogSanitizer';
 
 export type ErrorLogSource = 'http' | 'ws' | 'sse' | 'runtime' | 'promise' | 'unknown';
 
@@ -25,7 +26,7 @@ export const useErrorLogStore = create<{
   addEntry: (entry) => {
     if (!useSettingsStore.getState().collectErrorLogs) return;
     const next: ErrorLogEntry = {
-      ...entry,
+      ...sanitizeErrorLogEntry(entry),
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       timestamp: entry.timestamp ?? Date.now(),
     };

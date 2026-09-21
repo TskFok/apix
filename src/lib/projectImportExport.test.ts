@@ -64,6 +64,67 @@ describe('parseProjectExportJson', () => {
       parseProjectExportJson(JSON.stringify({ ...minimalValid, format: 'x' }))
     ).toThrow(ProjectImportError);
   });
+
+  it('导入时移除不可见旧 auth，并保留合法环境与显式变量', () => {
+    const legacy = {
+      ...minimalValid,
+      project: {
+        ...minimalValid.project,
+        global_config: JSON.stringify({
+          headers: [{ key: 'Authorization', value: 'visible-header', description: '', enabled: true }],
+          baseUrl: 'https://api.example.com',
+          variables: [{ key: 'token', value: 'visible-variable', description: '', enabled: true }],
+          environments: [
+            {
+              id: 'staging',
+              name: '预发',
+              baseUrl: 'https://staging.example.com',
+              headers: [{ key: 'X-Env', value: 'staging', description: '', enabled: true }],
+              variables: [{ key: 'region', value: 'cn', description: '', enabled: true }],
+            },
+          ],
+          activeEnvironmentId: 'staging',
+          auth: { type: 'basic', username: 'legacy-user', password: 'legacy-password' },
+          obsoleteSecret: 'unknown-hidden-secret',
+        }),
+      },
+    };
+
+    const parsed = parseProjectExportJson(JSON.stringify(legacy));
+    const config = JSON.parse(parsed.project.global_config) as Record<string, unknown>;
+
+    expect(config).not.toHaveProperty('auth');
+    expect(config).not.toHaveProperty('obsoleteSecret');
+    expect(parsed.project.global_config).not.toContain('legacy-password');
+    expect(parsed.project.global_config).not.toContain('unknown-hidden-secret');
+    expect(parsed.project.global_config).toContain('visible-header');
+    expect(parsed.project.global_config).toContain('visible-variable');
+    expect(parsed.project.global_config).toContain('https://staging.example.com');
+    expect(config.activeEnvironmentId).toBe('staging');
+  });
+
+  it('序列化导出时移除不可见旧 auth，但不全面脱敏显式全局配置', () => {
+    const payload: ApixProjectExportFile = {
+      ...minimalValid,
+      project: {
+        ...minimalValid.project,
+        global_config: JSON.stringify({
+          headers: [{ key: 'Cookie', value: 'explicit-cookie', description: '', enabled: true }],
+          variables: [{ key: 'api_token', value: 'explicit-variable', description: '', enabled: true }],
+          auth: { type: 'bearer', token: 'legacy-auth-token' },
+        }),
+      },
+    };
+
+    const text = serializeProjectExport(payload);
+    const exported = JSON.parse(text) as ApixProjectExportFile;
+    const config = JSON.parse(exported.project.global_config) as Record<string, unknown>;
+
+    expect(text).not.toContain('legacy-auth-token');
+    expect(config).not.toHaveProperty('auth');
+    expect(text).toContain('explicit-cookie');
+    expect(text).toContain('explicit-variable');
+  });
 });
 
 describe('buildProjectExportPayload', () => {
@@ -116,5 +177,24 @@ describe('buildProjectExportPayload', () => {
     vi.mocked(db.listEndpointsByModuleIds).mockResolvedValue({});
     const p = await buildProjectExportPayload(1, { moduleIds: [] });
     expect(p?.modules).toEqual([]);
+  });
+
+  it('从数据库构建导出对象时移除不可见旧 auth', async () => {
+    vi.mocked(db.getProject).mockResolvedValue({
+      ...projectRow,
+      global_config: JSON.stringify({
+        headers: [],
+        variables: [],
+        auth: { type: 'cookie', value: 'legacy-cookie-secret' },
+      }),
+    });
+    vi.mocked(db.listModules).mockResolvedValue([]);
+    vi.mocked(db.listEndpointsByModuleIds).mockResolvedValue({});
+
+    const payload = await buildProjectExportPayload(1);
+    const config = JSON.parse(payload!.project.global_config) as Record<string, unknown>;
+
+    expect(payload?.project.global_config).not.toContain('legacy-cookie-secret');
+    expect(config).not.toHaveProperty('auth');
   });
 });

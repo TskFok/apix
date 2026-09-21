@@ -237,4 +237,30 @@ describe('ResponseViewer 复制响应体', () => {
       expect(writeText).toHaveBeenCalledWith('X-Test: a\nContent-Type: application/json');
     });
   });
+
+  it('复制错误日志只能得到脱敏副本', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+    useSettingsStore.getState().setCollectErrorLogs(true);
+    useErrorLogStore.getState().clearEntries();
+    useErrorLogStore.getState().addEntry({
+      source: 'http',
+      message: 'request failed',
+      context: {
+        method: 'GET',
+        resolvedUrl: 'https://example.com/api?token=copy-query-secret',
+        headers: { Authorization: 'Bearer copy-auth-secret', Cookie: 'session=copy-cookie-secret' },
+      },
+    });
+    render(<ResponseViewer />);
+    fireEvent.click(screen.getByRole('button', { name: /错误日志/ }));
+    fireEvent.click(screen.getByRole('button', { name: '复制错误日志' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalled());
+    const copied = writeText.mock.calls[0][0] as string;
+    expect(copied).toContain('request failed');
+    expect(copied).toContain('[REDACTED]');
+    expect(copied).not.toContain('copy-query-secret');
+    expect(copied).not.toContain('copy-auth-secret');
+    expect(copied).not.toContain('copy-cookie-secret');
+  });
 });

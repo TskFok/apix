@@ -112,4 +112,42 @@ describe('persistProjectEndpointIfNeeded', () => {
     expect(vi.mocked(db.updateApiEndpoint)).toHaveBeenCalled();
     expect(useResponseStore.getState().pendingTreeExpand).toBeNull();
   });
+
+  it('插入新接口等待期间切换到其他接口时不覆盖新选择', async () => {
+    let resolveInsert!: (id: number) => void;
+    vi.mocked(db.addApiEndpoint).mockImplementationOnce(
+      () => new Promise<number>((resolve) => {
+        resolveInsert = resolve;
+      })
+    );
+    await useRequestStore.getState().setProjectContext({
+      projectId: 10,
+      moduleId: 5,
+      endpointId: null,
+      globalConfig: { headers: [], variables: [] },
+    });
+    useRequestStore.getState().setUrl('https://api.example.com/a');
+
+    const persistPromise = persistProjectEndpointIfNeeded();
+    await vi.waitFor(() => expect(vi.mocked(db.addApiEndpoint)).toHaveBeenCalledTimes(1));
+    useRequestStore.setState({
+      currentProjectId: 20,
+      currentModuleId: 6,
+      currentEndpointId: 77,
+      projectGlobalConfig: null,
+      url: 'https://api.example.com/b',
+      endpointRemark: '接口 B',
+    });
+    resolveInsert(999);
+
+    await expect(persistPromise).resolves.toBe(999);
+    expect(useRequestStore.getState()).toMatchObject({
+      currentProjectId: 20,
+      currentModuleId: 6,
+      currentEndpointId: 77,
+      url: 'https://api.example.com/b',
+      endpointRemark: '接口 B',
+    });
+    expect(useResponseStore.getState().pendingTreeExpand).toBeNull();
+  });
 });

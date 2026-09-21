@@ -284,7 +284,7 @@ function App() {
               <span className="environment-shortcut-current">{activeProjectEnvironmentName}</span>
             </button>
           )}
-          <FastTooltip label="开启后会收集更完整的错误细节，便于排查">
+          <FastTooltip label="开启后收集错误细节；请求头值、URL 查询值和消息载荷会脱敏">
             <label className={`error-collect-label ${collectErrorLogs ? 'is-active' : ''}`}>
               <input
                 type="checkbox"
