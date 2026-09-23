@@ -93,7 +93,7 @@ describe('RequestBuilder', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Body' }));
     fireEvent.click(screen.getByRole('button', { name: '导入' }));
 
-    const input = screen.getByPlaceholderText('a=1&b=1') as HTMLInputElement;
+    const input = screen.getByPlaceholderText(/a=1&b=1/);
     fireEvent.change(input, { target: { value: 'a=1&b=1' } });
     fireEvent.click(screen.getByRole('button', { name: '填充 Body' }));
 
@@ -102,6 +102,45 @@ describe('RequestBuilder', () => {
     expect(screen.getByDisplayValue('b')).toBeInTheDocument();
     expect(screen.getAllByDisplayValue('1')).toHaveLength(2);
   });
+
+  it.each(['form-data', 'x-www-form-urlencoded'] as const)(
+    '从多行弹窗导入冒号格式到 %s 并保留当前 Body 类型',
+    (bodyType) => {
+      useRequestStore.getState().setBodyType(bodyType);
+      render(
+        <RequestBuilder
+          onSendHttp={noop}
+          onConnectWs={noop}
+          onDisconnectWs={noop}
+          onConnectSse={noop}
+          onDisconnectSse={noop}
+          wsConnected={false}
+          sseConnected={false}
+        />
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Body' }));
+      fireEvent.click(screen.getByRole('button', { name: '导入' }));
+
+      const input = screen.getByPlaceholderText(/a=1&b=1/);
+      expect(input.tagName).toBe('TEXTAREA');
+      fireEvent.change(input, {
+        target: { value: 'order_tag: cart\nsample_goods[0][sku_id]: 100452\ntoken: demo+token==' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: '填充 Body' }));
+
+      expect(screen.getByLabelText(bodyType)).toBeChecked();
+      expect(screen.getByDisplayValue('sample_goods[0][sku_id]')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('100452')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('demo+token==')).toBeInTheDocument();
+      expect(useRequestStore.getState().bodyFormFields).toEqual([
+        { key: 'order_tag', value: 'cart', description: '', enabled: true, type: 'text' },
+        { key: 'sample_goods[0][sku_id]', value: '100452', description: '', enabled: true, type: 'text' },
+        { key: 'token', value: 'demo+token==', description: '', enabled: true, type: 'text' },
+        { key: '', value: '', description: '', enabled: true, type: 'text' },
+      ]);
+    }
+  );
 
   it('从弹窗导入 cURL 并回填请求表单', () => {
     render(

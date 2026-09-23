@@ -5,7 +5,7 @@ import type { HttpMethod, BodyType } from '../../types';
 import { FileSelectModal } from '../FileSelectModal/FileSelectModal';
 import { FastTooltip } from '../FastTooltip/FastTooltip';
 import { Modal } from '../Modal/Modal';
-import { EMPTY_BODY_FORM_FIELD, parseUrlEncodedBodyInput } from '../../lib/bodyForm';
+import { EMPTY_BODY_FORM_FIELD, parseBodyFormInput } from '../../lib/bodyForm';
 import { buildDisplayUrlFromQueryFields, parseUrlToBaseAndParams } from '../../lib/http';
 import { buildCurlCommandFromRequest } from '../../lib/buildCurlCommand';
 import { parseCurlCommand } from '../../lib/parseCurlCommand';
@@ -230,9 +230,9 @@ export function RequestBuilder({
     }
   }, []);
 
-  const handleImportUrlEncodedBody = useCallback(
+  const handleImportBody = useCallback(
     (value: string) => {
-      const fields = parseUrlEncodedBodyInput(value);
+      const fields = parseBodyFormInput(value);
       if (fields.length === 0) return;
       setBodyFormFields([...fields, { ...EMPTY_BODY_FORM_FIELD }]);
     },
@@ -620,7 +620,7 @@ export function RequestBuilder({
                   </label>
                 ))}
               </div>
-              <FastTooltip label="粘贴 a=1&b=1 格式并填充到 Body">
+              <FastTooltip label="粘贴 a=1&b=1 或每行 key: value 格式并填充到 Body">
                 <button
                   type="button"
                   className="body-import-btn"
@@ -903,10 +903,11 @@ export function RequestBuilder({
       <Modal
         open={bodyImportModalOpen}
         title="导入 Body"
-        placeholder="a=1&b=1"
+        placeholder={'a=1&b=1\n或每行一个字段：\norder_tag: cart\nsample_goods[0][sku_id]: 100452'}
         confirmLabel="填充 Body"
+        multiline
         onClose={() => setBodyImportModalOpen(false)}
-        onConfirm={handleImportUrlEncodedBody}
+        onConfirm={handleImportBody}
       />
       <Modal
         open={curlImportModalOpen}

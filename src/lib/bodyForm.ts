@@ -21,7 +21,23 @@ function getUrlEncodedPart(input: string): string {
   return trimmed;
 }
 
-export function parseUrlEncodedBodyInput(input: string): BodyFormField[] {
+export function parseBodyFormInput(input: string): BodyFormField[] {
+  const trimmed = input.trim();
+  if (!trimmed) return [];
+
+  // 完整 URL 继续按查询串导入；冒号行中的值则不做 URL 解码。
+  if (!/^[a-z][a-z\d+.-]*:\/\//i.test(trimmed)) {
+    const lines = trimmed.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const matches = lines.map((line) => line.match(/^([^:=&?]+):\s*(.*)$/));
+    if (matches.every((match) => match !== null)) {
+      return matches.map((match) => ({
+        ...EMPTY_BODY_FORM_FIELD,
+        key: match[1].trim(),
+        value: match[2].trim(),
+      }));
+    }
+  }
+
   const raw = getUrlEncodedPart(input);
   if (!raw) return [];
 
