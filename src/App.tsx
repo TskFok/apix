@@ -32,8 +32,37 @@ const REQUEST_PANEL_MIN = 120;
 const REQUEST_PANEL_MAX = 600;
 const REQUEST_PANEL_DEFAULT = 280;
 const REQUEST_PANEL_STORAGE_KEY = 'apix-request-panel-height';
+const REQUEST_PANEL_WIDTH_MIN = 320;
+const REQUEST_PANEL_WIDTH_MAX = 960;
+const REQUEST_PANEL_WIDTH_DEFAULT = 520;
+const REQUEST_PANEL_WIDTH_STORAGE_KEY = 'apix-request-panel-width';
+const WORKSPACE_LAYOUT_STORAGE_KEY = 'apix-workspace-layout';
 /** 展开响应区时请求区保留高度（与 REQUEST_PANEL_MIN 一致，保证可滚动编辑） */
 const REQUEST_PANEL_HEIGHT_WHEN_RESPONSE_EXPANDED = REQUEST_PANEL_MIN;
+
+type WorkspaceLayout = 'stacked' | 'side';
+
+function getInitialWorkspaceLayout(): WorkspaceLayout {
+  return localStorage.getItem(WORKSPACE_LAYOUT_STORAGE_KEY) === 'side' ? 'side' : 'stacked';
+}
+
+function IconLayoutStacked() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+      <rect x="1" y="1.5" width="12" height="4" rx="1" stroke="currentColor" strokeWidth="1.4" />
+      <rect x="1" y="8.5" width="12" height="4" rx="1" stroke="currentColor" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
+function IconLayoutSide() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+      <rect x="1" y="1" width="5" height="12" rx="1" stroke="currentColor" strokeWidth="1.4" />
+      <rect x="8" y="1" width="5" height="12" rx="1" stroke="currentColor" strokeWidth="1.4" />
+    </svg>
+  );
+}
 
 function getInitialTheme(): 'light' | 'dark' {
   const stored = localStorage.getItem(THEME_KEY);
@@ -65,11 +94,22 @@ function App() {
     }
     return REQUEST_PANEL_DEFAULT;
   });
+  const [requestPanelWidth, setRequestPanelWidth] = useState(() => {
+    const stored = localStorage.getItem(REQUEST_PANEL_WIDTH_STORAGE_KEY);
+    if (stored) {
+      const w = parseInt(stored, 10);
+      if (!Number.isNaN(w) && w >= REQUEST_PANEL_WIDTH_MIN && w <= REQUEST_PANEL_WIDTH_MAX) return w;
+    }
+    return REQUEST_PANEL_WIDTH_DEFAULT;
+  });
+  const [workspaceLayout, setWorkspaceLayout] = useState<WorkspaceLayout>(getInitialWorkspaceLayout);
   const [responseAreaExpanded, setResponseAreaExpanded] = useState(false);
   const responseAreaExpandedRef = useRef(false);
+  const workspaceLayoutRef = useRef(workspaceLayout);
   const savedRequestPanelHeightRef = useRef<number | null>(null);
   const requestPanelHeightRef = useRef(requestPanelHeight);
   requestPanelHeightRef.current = requestPanelHeight;
+  workspaceLayoutRef.current = workspaceLayout;
   useEffect(() => {
     responseAreaExpandedRef.current = responseAreaExpanded;
   }, [responseAreaExpanded]);
@@ -162,15 +202,25 @@ function App() {
         setSidebarWidth(w);
         localStorage.setItem(STORAGE_KEY, String(w));
       }
-      if (isRequestPanelResizing.current && mainRef.current && !responseAreaExpandedRef.current) {
+      if (isRequestPanelResizing.current && mainRef.current) {
         const rect = mainRef.current.getBoundingClientRect();
-        const maxH = rect.height - 80;
-        const newH = Math.max(
-          REQUEST_PANEL_MIN,
-          Math.min(maxH, e.clientY - rect.top - 8)
-        );
-        setRequestPanelHeight(newH);
-        localStorage.setItem(REQUEST_PANEL_STORAGE_KEY, String(newH));
+        if (workspaceLayoutRef.current === 'side') {
+          const maxW = Math.min(REQUEST_PANEL_WIDTH_MAX, rect.width - 160);
+          const newW = Math.max(
+            REQUEST_PANEL_WIDTH_MIN,
+            Math.min(maxW, e.clientX - rect.left - 8)
+          );
+          setRequestPanelWidth(newW);
+          localStorage.setItem(REQUEST_PANEL_WIDTH_STORAGE_KEY, String(newW));
+        } else if (!responseAreaExpandedRef.current) {
+          const maxH = rect.height - 80;
+          const newH = Math.max(
+            REQUEST_PANEL_MIN,
+            Math.min(maxH, e.clientY - rect.top - 8)
+          );
+          setRequestPanelHeight(newH);
+          localStorage.setItem(REQUEST_PANEL_STORAGE_KEY, String(newH));
+        }
       }
     };
     const onUp = () => {
@@ -187,6 +237,16 @@ function App() {
       onUp();
     };
   }, []);
+
+  const toggleWorkspaceLayout = useCallback(() => {
+    setWorkspaceLayout((current) => {
+      const next: WorkspaceLayout = current === 'side' ? 'stacked' : 'side';
+      localStorage.setItem(WORKSPACE_LAYOUT_STORAGE_KEY, next);
+      return next;
+    });
+  }, []);
+
+  const sideBySide = workspaceLayout === 'side';
 
   const toggleResponseAreaExpand = useCallback(() => {
     setResponseAreaExpanded((exp) => {
@@ -347,6 +407,21 @@ function App() {
               </FastTooltip>
             </label>
           )}
+          <FastTooltip label={sideBySide ? '切换为上下布局' : '切换为左右并列，响应在右侧'}>
+            <button
+              type="button"
+              className={`theme-toggle-btn layout-toggle-btn${sideBySide ? ' is-side' : ''}`}
+              onClick={toggleWorkspaceLayout}
+              aria-label={sideBySide ? '切换为上下布局' : '切换为左右并列布局'}
+              aria-pressed={sideBySide}
+            >
+              <span className="theme-toggle-icon" aria-hidden="true">
+                {sideBySide ? <IconLayoutSide /> : <IconLayoutStacked />}
+              </span>
+              <span className="theme-toggle-text">布局</span>
+              <span className="theme-toggle-state">{sideBySide ? '左右' : '上下'}</span>
+            </button>
+          </FastTooltip>
           <FastTooltip label={theme === 'light' ? '切换为深色' : '切换为浅色'}>
             <button
               type="button"
@@ -452,11 +527,26 @@ function App() {
         />
         <main
           ref={mainRef}
-          className={`main${responseAreaExpanded ? ' main--response-expanded' : ''}`}
+          className={`main${sideBySide ? ' main--side' : ''}${
+            !sideBySide && responseAreaExpanded ? ' main--response-expanded' : ''
+          }`}
+          data-workspace-layout={workspaceLayout}
         >
           <div
             className="request-panel-wrapper"
-            style={{ height: requestPanelHeight, minHeight: requestPanelHeight, maxHeight: requestPanelHeight }}
+            style={
+              sideBySide
+                ? {
+                    width: requestPanelWidth,
+                    minWidth: requestPanelWidth,
+                    maxWidth: requestPanelWidth,
+                  }
+                : {
+                    height: requestPanelHeight,
+                    minHeight: requestPanelHeight,
+                    maxHeight: requestPanelHeight,
+                  }
+            }
           >
             {showProjectGlobalsPage ? (
               <div className="request-panel-main">
@@ -481,23 +571,25 @@ function App() {
             className="request-response-resizer"
             onMouseDown={(e) => {
               e.preventDefault();
+              if (!sideBySide && responseAreaExpanded) return;
               isRequestPanelResizing.current = true;
-              document.body.style.cursor = 'row-resize';
+              document.body.style.cursor = sideBySide ? 'col-resize' : 'row-resize';
               document.body.style.userSelect = 'none';
             }}
             role="separator"
-            aria-label="调整请求区与响应区高度"
+            aria-orientation={sideBySide ? 'vertical' : 'horizontal'}
+            aria-label={sideBySide ? '调整请求区与响应区宽度' : '调整请求区与响应区高度'}
           />
           <div className="response-area">
             {responseMode === 'http' ? (
               <ResponseViewer
                 responseExpanded={responseAreaExpanded}
-                onToggleResponseExpand={toggleResponseAreaExpand}
+                onToggleResponseExpand={sideBySide ? undefined : toggleResponseAreaExpand}
               />
             ) : (
               <StreamViewer
                 responseExpanded={responseAreaExpanded}
-                onToggleResponseExpand={toggleResponseAreaExpand}
+                onToggleResponseExpand={sideBySide ? undefined : toggleResponseAreaExpand}
               />
             )}
           </div>

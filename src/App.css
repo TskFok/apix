@@ -385,6 +385,23 @@ select:focus-visible,
   border-color: #c4d0df;
 }
 
+.theme-toggle-btn:focus-visible {
+  outline: 2px solid rgba(36, 99, 235, 0.22);
+  outline-offset: 2px;
+  border-color: #2463eb;
+}
+
+.theme-toggle-btn.is-side {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.theme-toggle-btn.is-side .theme-toggle-icon {
+  background: #2463eb;
+  color: #fff;
+}
+
 .theme-toggle-btn.is-dark {
   border-color: #bfdbfe;
   background: #eff6ff;
@@ -566,6 +583,28 @@ select:focus-visible,
 
 .main--response-expanded .request-response-resizer {
   display: none;
+}
+
+.main--side {
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.main--side .request-panel-wrapper {
+  height: auto;
+  max-height: none;
+  align-self: stretch;
+}
+
+.main--side .request-response-resizer {
+  width: 6px;
+  height: auto;
+  align-self: stretch;
+  cursor: col-resize;
+}
+
+.main--side .response-area {
+  min-width: 0;
 }
 
 .request-panel-wrapper {
@@ -2853,9 +2892,16 @@ html[data-theme="dark"] {
     color: var(--color-text);
   }
 
-  .theme-toggle-btn.is-dark .theme-toggle-icon {
+  .theme-toggle-btn.is-dark .theme-toggle-icon,
+  .theme-toggle-btn.is-side .theme-toggle-icon {
     background: var(--color-primary);
     color: #fff;
+  }
+
+  .theme-toggle-btn.is-side {
+    background: var(--color-primary-soft);
+    border-color: var(--color-primary-border);
+    color: var(--color-primary-text);
   }
 
   .sidebar-resizer:hover {

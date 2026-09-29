@@ -165,6 +165,51 @@ describe('App', () => {
     expect(switchInput).toHaveAttribute('aria-checked', 'true');
   });
 
+  it('可在上下布局与左右并列之间切换，并列时响应在右侧', () => {
+    render(<App />);
+
+    const main = document.querySelector('main');
+    const request = screen.getByText('RequestBuilder');
+    const response = screen.getByText('ResponseViewer');
+    expect(main).toHaveAttribute('data-workspace-layout', 'stacked');
+    expect(main).not.toHaveClass('main--side');
+    expect(request.compareDocumentPosition(response) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole('button', { name: '切换为左右并列布局' })).toHaveTextContent('上下');
+    expect(screen.getByRole('separator', { name: '调整请求区与响应区高度' })).toHaveAttribute(
+      'aria-orientation',
+      'horizontal'
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '切换为左右并列布局' }));
+
+    expect(main).toHaveClass('main--side');
+    expect(main).toHaveAttribute('data-workspace-layout', 'side');
+    expect(request.compareDocumentPosition(response) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole('button', { name: '切换为上下布局' })).toHaveTextContent('左右');
+    expect(screen.getByRole('separator', { name: '调整请求区与响应区宽度' })).toHaveAttribute(
+      'aria-orientation',
+      'vertical'
+    );
+    expect(localStorage.setItem).toHaveBeenCalledWith('apix-workspace-layout', 'side');
+
+    fireEvent.click(screen.getByRole('button', { name: '切换为上下布局' }));
+
+    expect(main).not.toHaveClass('main--side');
+    expect(main).toHaveAttribute('data-workspace-layout', 'stacked');
+    expect(localStorage.setItem).toHaveBeenCalledWith('apix-workspace-layout', 'stacked');
+  });
+
+  it('记住上次选择的左右并列布局', () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key: string) =>
+      key === 'apix-workspace-layout' ? 'side' : null
+    );
+
+    render(<App />);
+
+    expect(document.querySelector('main')).toHaveClass('main--side');
+    expect(screen.getByRole('button', { name: '切换为上下布局' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
   it('在右上角以统一样式切换深色浅色主题', async () => {
     render(<App />);
 
