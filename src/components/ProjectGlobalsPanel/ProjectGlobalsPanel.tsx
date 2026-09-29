@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { confirm, message } from '@tauri-apps/plugin-dialog';
 import type { KeyValueField, ProjectGlobalVariable, ProjectGlobalVariableTarget } from '../../types';
 import { useRequestStore } from '../../stores/requestStore';
+import type { ProjectEnvironmentEditorContext } from '../../hooks/useProjectEnvironmentEditor';
 import { getProject } from '../../lib/db';
 import { DEFAULT_PROJECT_ENVIRONMENTS, getProjectBaseUrl, getProjectHeaderRows } from '../../lib/projectMerge';
 import { FastTooltip } from '../FastTooltip/FastTooltip';
@@ -56,11 +57,18 @@ function nextEnvironmentId(): string {
   return `env-${Date.now().toString(36)}`;
 }
 
-export function ProjectGlobalsPanel() {
-  const currentProjectId = useRequestStore((s) => s.currentProjectId);
-  const projectGlobalConfig = useRequestStore((s) => s.projectGlobalConfig);
-  const updateProjectGlobalConfig = useRequestStore((s) => s.updateProjectGlobalConfig);
-  const flushProjectGlobalsDraft = useRequestStore((s) => s.flushProjectGlobalsDraft);
+export function ProjectGlobalsPanel({ context, keyboardShortcutsEnabled = true }: {
+  context?: ProjectEnvironmentEditorContext;
+  keyboardShortcutsEnabled?: boolean;
+} = {}) {
+  const requestProjectId = useRequestStore((s) => s.currentProjectId);
+  const requestProjectGlobalConfig = useRequestStore((s) => s.projectGlobalConfig);
+  const updateRequestProjectGlobalConfig = useRequestStore((s) => s.updateProjectGlobalConfig);
+  const flushRequestProjectGlobalsDraft = useRequestStore((s) => s.flushProjectGlobalsDraft);
+  const currentProjectId = context ? context.projectId : requestProjectId;
+  const projectGlobalConfig = context ? context.config : requestProjectGlobalConfig;
+  const updateProjectGlobalConfig = context ? context.updateConfig : updateRequestProjectGlobalConfig;
+  const flushProjectGlobalsDraft = context ? context.flush : flushRequestProjectGlobalsDraft;
 
   const [projectName, setProjectName] = useState('');
   const [environmentEditMode, setEnvironmentEditMode] = useState<EnvironmentEditMode>(null);
@@ -80,12 +88,13 @@ export function ProjectGlobalsPanel() {
   }, [currentProjectId, persistFingerprint, flushProjectGlobalsDraft]);
 
   useEffect(() => {
+    if (!keyboardShortcutsEnabled) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 's' && e.key !== 'S') return;
       if (!(e.metaKey || e.ctrlKey)) return;
       e.preventDefault();
       void (async () => {
-        const ok = await useRequestStore.getState().flushProjectGlobalsDraft();
+        const ok = await flushProjectGlobalsDraft();
         if (ok) {
           await message('已保存', { title: 'Apix', kind: 'info' });
         } else {
@@ -95,7 +104,7 @@ export function ProjectGlobalsPanel() {
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, []);
+  }, [flushProjectGlobalsDraft, keyboardShortcutsEnabled]);
 
   useEffect(() => {
     if (currentProjectId == null) {

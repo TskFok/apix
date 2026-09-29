@@ -220,7 +220,8 @@ describe('ProjectTreePanel', () => {
     useRequestStore.getState().setCurrentHistoryId(99);
     const requestBeforeClick = useRequestStore.getState();
 
-    render(<ProjectTreePanel />);
+    const onSelectEnvironmentProject = vi.fn();
+    render(<ProjectTreePanel onSelectEnvironmentProject={onSelectEnvironmentProject} />);
     const projectButton = await screen.findByRole('button', { name: '测试项目' });
     expect(screen.getByText('用户模块')).toBeInTheDocument();
 
@@ -230,6 +231,7 @@ describe('ProjectTreePanel', () => {
     expect(screen.queryByText('用户模块')).not.toBeInTheDocument();
     expect(projectButton).toHaveAttribute('aria-expanded', 'false');
     expect(useRequestStore.getState()).toEqual(requestBeforeClick);
+    expect(onSelectEnvironmentProject).toHaveBeenCalledWith(testProject);
 
     await act(async () => {
       fireEvent.click(projectButton);
@@ -237,6 +239,68 @@ describe('ProjectTreePanel', () => {
     expect(screen.getByText('用户模块')).toBeInTheDocument();
     expect(projectButton).toHaveAttribute('aria-expanded', 'true');
     expect(useRequestStore.getState()).toEqual(requestBeforeClick);
+    expect(onSelectEnvironmentProject).toHaveBeenCalledTimes(2);
+  });
+
+  it('点击模块名称选择所属项目环境，但保留当前请求归属', async () => {
+    moduleRowsRef.current = [{ id: 10, project_id: 1, name: '用户模块', sort_order: 0, created_at: 0, updated_at: 0 }];
+    await useRequestStore.getState().setProjectContext({
+      projectId: 2,
+      moduleId: 20,
+      endpointId: 200,
+      globalConfig: { headers: [], variables: [] },
+    });
+    useRequestStore.getState().setUrl('https://api.example.com/draft');
+    const onSelectEnvironmentProject = vi.fn();
+    render(<ProjectTreePanel onSelectEnvironmentProject={onSelectEnvironmentProject} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '用户模块' }));
+
+    expect(onSelectEnvironmentProject).toHaveBeenCalledWith(testProject);
+    expect(useRequestStore.getState().newEndpointTargetModule).toEqual({ projectId: 1, moduleId: 10 });
+    expect(useRequestStore.getState().currentProjectId).toBe(2);
+    expect(useRequestStore.getState().currentEndpointId).toBe(200);
+    expect(useRequestStore.getState().url).toBe('https://api.example.com/draft');
+  });
+
+  it('选择接口前等待环境编辑目标切换完成', async () => {
+    moduleRowsRef.current = [{ id: 10, project_id: 1, name: '用户模块', sort_order: 0, created_at: 0, updated_at: 0 }];
+    endpointRowsRef.current = [{
+      id: 100, module_id: 10, name: '登录接口', protocol: 'http', method: 'GET',
+      url: 'https://api.example.com/login', headers: '{}', params: '{}', body: '{}',
+      sort_order: 0, created_at: 0, updated_at: 0,
+      response_status: null, response_headers: null, response_body: null, response_time_ms: null,
+    }];
+    let finishEnvironmentSave!: () => void;
+    const environmentSaved = new Promise<boolean>((resolve) => { finishEnvironmentSave = () => resolve(true); });
+    const onSelectEnvironmentProject = vi.fn(() => environmentSaved);
+    render(<ProjectTreePanel onSelectEnvironmentProject={onSelectEnvironmentProject} />);
+
+    fireEvent.click(await screen.findByText('登录接口'));
+    expect(onSelectEnvironmentProject).toHaveBeenCalledWith(null);
+    expect(getProjectMock).not.toHaveBeenCalled();
+
+    await act(async () => { finishEnvironmentSave(); });
+    await waitFor(() => expect(getProjectMock).toHaveBeenCalledWith(1));
+    expect(useRequestStore.getState().currentEndpointId).toBe(100);
+  });
+
+  it('环境草稿保存失败时不切换接口', async () => {
+    moduleRowsRef.current = [{ id: 10, project_id: 1, name: '用户模块', sort_order: 0, created_at: 0, updated_at: 0 }];
+    endpointRowsRef.current = [{
+      id: 100, module_id: 10, name: '登录接口', protocol: 'http', method: 'GET',
+      url: 'https://api.example.com/login', headers: '{}', params: '{}', body: '{}',
+      sort_order: 0, created_at: 0, updated_at: 0,
+      response_status: null, response_headers: null, response_body: null, response_time_ms: null,
+    }];
+    const onSelectEnvironmentProject = vi.fn().mockResolvedValue(false);
+    render(<ProjectTreePanel onSelectEnvironmentProject={onSelectEnvironmentProject} />);
+
+    fireEvent.click(await screen.findByText('登录接口'));
+    await waitFor(() => expect(onSelectEnvironmentProject).toHaveBeenCalledWith(null));
+
+    expect(getProjectMock).not.toHaveBeenCalled();
+    expect(useRequestStore.getState().currentEndpointId).toBeNull();
   });
 
   it('新建模块后默认选中该模块，供「+ 新建」创建接口', async () => {

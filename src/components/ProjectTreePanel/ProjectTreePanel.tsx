@@ -66,6 +66,10 @@ interface ProjectTreeScrollTarget {
   endpointId?: number | null;
 }
 
+interface ProjectTreePanelProps {
+  onSelectEnvironmentProject?: (project: ProjectRow | null) => void | Promise<boolean>;
+}
+
 type DeleteConfirmTarget =
   | { kind: 'project'; project: ProjectRow }
   | { kind: 'module'; projectId: number; module: ModuleRow }
@@ -84,8 +88,15 @@ async function loadTree(): Promise<TreeData> {
   return { projects, modulesByProject, endpointsByModule };
 }
 
-export function ProjectTreePanel() {
+export function ProjectTreePanel({ onSelectEnvironmentProject }: ProjectTreePanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const selectedEnvironmentProjectIdRef = useRef<number | null>(null);
+  const onSelectEnvironmentProjectRef = useRef(onSelectEnvironmentProject);
+  onSelectEnvironmentProjectRef.current = onSelectEnvironmentProject;
+  const selectEnvironmentProject = (project: ProjectRow | null) => {
+    selectedEnvironmentProjectIdRef.current = project?.id ?? null;
+    return onSelectEnvironmentProjectRef.current?.(project);
+  };
   const [tree, setTree] = useState<TreeData>({ projects: [], modulesByProject: {}, endpointsByModule: {} });
   const [loading, setLoading] = useState(true);
   const loadedOnceRef = useRef(false);
@@ -144,6 +155,13 @@ export function ProjectTreePanel() {
     }
     try {
       const data = await loadTree();
+      if (
+        selectedEnvironmentProjectIdRef.current != null &&
+        !data.projects.some((project) => project.id === selectedEnvironmentProjectIdRef.current)
+      ) {
+        selectedEnvironmentProjectIdRef.current = null;
+        onSelectEnvironmentProjectRef.current?.(null);
+      }
       const savedP = loadExpandedProjects();
       const savedM = loadExpandedModules();
       const { expandedProject: nextP, expandedModule: nextM } = mergeExpandedWithTree(
@@ -361,6 +379,11 @@ export function ProjectTreePanel() {
   }, [importPayload, importMode, importTargetId, fetchTree, refreshProjects]);
 
   const handleSelectEndpoint = async (projectId: number, moduleId: number, ep: ApiEndpointRow) => {
+    const previousEnvironmentProjectId = selectedEnvironmentProjectIdRef.current;
+    if (await selectEnvironmentProject(null) === false) {
+      selectedEnvironmentProjectIdRef.current = previousEnvironmentProjectId;
+      return;
+    }
     setNewEndpointTargetModule({ projectId, moduleId });
     // 须先 flush 再读库：否则 setProjectContext 内 flush 写入 DB 后仍会用此处预先读取的旧 global_config 覆盖 store
     await flushProjectGlobalsDraft();
@@ -444,6 +467,12 @@ export function ProjectTreePanel() {
     if (result.endpointId != null && moduleId != null) {
       const ep = (tree.endpointsByModule[moduleId] ?? []).find((x) => x.id === result.endpointId);
       if (ep) await handleSelectEndpoint(result.projectId, moduleId, ep);
+    } else {
+      const project = tree.projects.find((p) => p.id === result.projectId);
+      if (project) selectEnvironmentProject(project);
+      if (moduleId != null) {
+        setNewEndpointTargetModule({ projectId: result.projectId, moduleId });
+      }
     }
   };
 
@@ -488,6 +517,7 @@ export function ProjectTreePanel() {
 
     if (target.kind === 'project') {
       await deleteProject(target.project.id);
+      selectEnvironmentProject(null);
       const st0 = useRequestStore.getState();
       if (st0.newEndpointTargetModule?.projectId === target.project.id) {
         st0.setNewEndpointTargetModule(null);
@@ -948,6 +978,7 @@ export function ProjectTreePanel() {
           const row = await getProject(projectId);
           const cfg = row ? parseProjectGlobalConfig(row.global_config) : { headers: [], variables: [] };
           await enterProjectSettingsView(projectId, cfg);
+          selectEnvironmentProject(null);
           setExpandedProject((e) => ({ ...e, [projectId]: true }));
         }}
       />
@@ -967,6 +998,8 @@ export function ProjectTreePanel() {
           if (moduleId > 0) {
             setNewEndpointTargetModule({ projectId: pid, moduleId });
           }
+          const project = tree.projects.find((p) => p.id === pid);
+          if (project) selectEnvironmentProject(project);
         }}
       />
 
@@ -1025,7 +1058,10 @@ export function ProjectTreePanel() {
                     type="button"
                     className="project-tree-label project-tree-name-btn"
                     aria-expanded={!!expandedProject[p.id]}
-                    onClick={() => setExpandedProject((e) => ({ ...e, [p.id]: !e[p.id] }))}
+                    onClick={() => {
+                      selectEnvironmentProject(p);
+                      setExpandedProject((e) => ({ ...e, [p.id]: !e[p.id] }));
+                    }}
                   >
                     {p.name}
                   </button>
@@ -1115,6 +1151,7 @@ export function ProjectTreePanel() {
                             className="project-tree-label project-tree-module-name-btn"
                             aria-expanded={!!expandedModule[m.id]}
                             onClick={() => {
+                              selectEnvironmentProject(p);
                               setNewEndpointTargetModule({ projectId: p.id, moduleId: m.id });
                               setExpandedModule((e) => ({ ...e, [m.id]: !e[m.id] }));
                             }}

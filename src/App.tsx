@@ -13,6 +13,7 @@ import { useHttpRequest } from './hooks/useHttpRequest';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useSSE } from './hooks/useSSE';
 import { useEscapeToClose } from './hooks/useEscapeToClose';
+import { useProjectEnvironmentEditor } from './hooks/useProjectEnvironmentEditor';
 import { setupGlobalErrorCollection } from './lib/errorLog';
 import { setTheme as setTauriTheme } from '@tauri-apps/api/app';
 import { message } from '@tauri-apps/plugin-dialog';
@@ -77,15 +78,15 @@ function App() {
   const isRequestPanelResizing = useRef(false);
   const mainRef = useRef<HTMLElement>(null);
   const protocol = useRequestStore((s) => s.protocol);
-  const currentProjectId = useRequestStore((s) => s.currentProjectId);
-  const projectGlobalConfig = useRequestStore((s) => s.projectGlobalConfig);
+  const { context: environmentEditor, selectEnvironmentProject } = useProjectEnvironmentEditor();
+  const { projectId: environmentProjectId, config: projectGlobalConfig } = environmentEditor;
   const showProjectGlobalsPage =
     useRequestStore((s) => s.mainWorkspace === 'project_settings' && s.currentProjectId != null);
   const [projectGlobalsQuickEditOpen, setProjectGlobalsQuickEditOpen] = useState(false);
   const streamConnected = useResponseStore((s) => s.stream.connected);
   const responseMode = useResponseStore((s) => s.mode);
   const projectEnvironments =
-    currentProjectId != null && projectGlobalConfig
+    environmentProjectId != null && projectGlobalConfig
       ? projectGlobalConfig.environments?.length
         ? projectGlobalConfig.environments
         : DEFAULT_PROJECT_ENVIRONMENTS
@@ -100,7 +101,7 @@ function App() {
     projectEnvironments[0]?.name ??
     '默认环境';
   const showProjectEnvironmentShortcut =
-    currentProjectId != null && projectGlobalConfig != null && projectEnvironments.length > 0;
+    environmentProjectId != null && projectGlobalConfig != null && projectEnvironments.length > 0;
 
   const { send: sendHttp } = useHttpRequest();
   const { connect: connectWs, disconnect: disconnectWs, send: sendWs } =
@@ -117,8 +118,9 @@ function App() {
     prevSideTabRef.current = sideTab;
     if (prev === 'projects' && sideTab !== 'projects') {
       void useRequestStore.getState().flushProjectGlobalsDraft();
+      void selectEnvironmentProject(null);
     }
-  }, [sideTab]);
+  }, [sideTab, selectEnvironmentProject]);
 
   useEffect(() => {
     const preventContextMenu = (e: MouseEvent) => e.preventDefault();
@@ -142,8 +144,8 @@ function App() {
 
   const closeProjectGlobalsQuickEdit = useCallback(() => {
     setProjectGlobalsQuickEditOpen(false);
-    void useRequestStore.getState().flushProjectGlobalsDraft();
-  }, []);
+    void environmentEditor.flush();
+  }, [environmentEditor.flush]);
 
   useEscapeToClose(projectGlobalsQuickEditOpen, closeProjectGlobalsQuickEdit);
 
@@ -233,6 +235,7 @@ function App() {
     if (wsConnected) disconnectWs();
     if (sseConnected) disconnectSse();
     void (async () => {
+      if (!(await selectEnvironmentProject(null))) return;
       const st = useRequestStore.getState();
       const target = st.newEndpointTargetModule;
       if (sideTab === 'projects' && target != null) {
@@ -387,7 +390,7 @@ function App() {
               </button>
             </div>
             <div className="project-globals-quick-body">
-              <ProjectGlobalsPanel />
+              <ProjectGlobalsPanel key={environmentProjectId} context={environmentEditor} />
             </div>
           </div>
         </div>
@@ -428,7 +431,7 @@ function App() {
               </button>
             </FastTooltip>
           </div>
-          {sideTab === 'projects' && <ProjectTreePanel />}
+          {sideTab === 'projects' && <ProjectTreePanel onSelectEnvironmentProject={selectEnvironmentProject} />}
           {sideTab === 'history' && (
             <HistoryPanel protocol={protocol} />
           )}
@@ -457,7 +460,7 @@ function App() {
           >
             {showProjectGlobalsPage ? (
               <div className="request-panel-main">
-                <ProjectGlobalsPanel />
+                <ProjectGlobalsPanel keyboardShortcutsEnabled={!projectGlobalsQuickEditOpen} />
               </div>
             ) : (
               <div className="request-panel-main">
