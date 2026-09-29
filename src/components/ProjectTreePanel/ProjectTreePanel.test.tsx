@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
+import { act, render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { ProjectTreePanel } from './ProjectTreePanel';
 import { useRequestStore } from '../../stores/requestStore';
 import type { ApiEndpointRow, ModuleRow, ProjectRow } from '../../types';
@@ -196,31 +196,47 @@ describe('ProjectTreePanel', () => {
     expect(scrollArea).not.toContainElement(search as HTMLElement);
   });
 
-  it('打开当前项目全局页前先保存草稿，避免旧 global_config 覆盖 store', async () => {
-    getProjectMock.mockResolvedValue({
-      ...testProject,
-      global_config: JSON.stringify({
-        headers: [{ key: 'X-Old', value: 'old', description: '', enabled: true }],
+  it('点击项目名称只切换列表展开状态，保留当前请求和项目上下文', async () => {
+    moduleRowsRef.current = [
+      {
+        id: 10,
+        project_id: 1,
+        name: '用户模块',
+        sort_order: 0,
+        created_at: 0,
+        updated_at: 0,
+      },
+    ];
+    await useRequestStore.getState().setProjectContext({
+      projectId: 2,
+      moduleId: 20,
+      endpointId: 200,
+      globalConfig: {
+        headers: [{ key: 'X-Draft', value: 'draft', description: '', enabled: true }],
         variables: [],
-      }),
+      },
     });
-    await useRequestStore.getState().enterProjectSettingsView(1, {
-      headers: [{ key: 'X-Draft', value: 'draft', description: '', enabled: true }],
-      variables: [],
-    });
-    updateProjectMock.mockClear();
+    useRequestStore.getState().setUrl('https://api.example.com/draft');
+    useRequestStore.getState().setCurrentHistoryId(99);
+    const requestBeforeClick = useRequestStore.getState();
 
     render(<ProjectTreePanel />);
-    fireEvent.click(await screen.findByRole('button', { name: '测试项目' }));
+    const projectButton = await screen.findByRole('button', { name: '测试项目' });
+    expect(screen.getByText('用户模块')).toBeInTheDocument();
 
-    await waitFor(() => {
-      expect(updateProjectMock).toHaveBeenCalledWith(1, {
-        global_config: expect.stringContaining('X-Draft'),
-      });
+    await act(async () => {
+      fireEvent.click(projectButton);
     });
-    expect(updateProjectMock.mock.invocationCallOrder[0]).toBeLessThan(
-      getProjectMock.mock.invocationCallOrder[0]
-    );
+    expect(screen.queryByText('用户模块')).not.toBeInTheDocument();
+    expect(projectButton).toHaveAttribute('aria-expanded', 'false');
+    expect(useRequestStore.getState()).toEqual(requestBeforeClick);
+
+    await act(async () => {
+      fireEvent.click(projectButton);
+    });
+    expect(screen.getByText('用户模块')).toBeInTheDocument();
+    expect(projectButton).toHaveAttribute('aria-expanded', 'true');
+    expect(useRequestStore.getState()).toEqual(requestBeforeClick);
   });
 
   it('新建模块后默认选中该模块，供「+ 新建」创建接口', async () => {

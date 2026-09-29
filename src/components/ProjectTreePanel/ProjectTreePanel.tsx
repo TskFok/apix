@@ -360,16 +360,6 @@ export function ProjectTreePanel() {
     }
   }, [importPayload, importMode, importTargetId, fetchTree, refreshProjects]);
 
-  const handleOpenProjectGlobals = async (projectId: number) => {
-    await flushProjectGlobalsDraft();
-    const row = await getProject(projectId);
-    if (!row) return;
-    const cfg = parseProjectGlobalConfig(row.global_config);
-    await enterProjectSettingsView(projectId, cfg);
-    setExpandedProject((e) => ({ ...e, [projectId]: true }));
-    setCurrentHistoryId(null);
-  };
-
   const handleSelectEndpoint = async (projectId: number, moduleId: number, ep: ApiEndpointRow) => {
     setNewEndpointTargetModule({ projectId, moduleId });
     // 须先 flush 再读库：否则 setProjectContext 内 flush 写入 DB 后仍会用此处预先读取的旧 global_config 覆盖 store
@@ -454,8 +444,6 @@ export function ProjectTreePanel() {
     if (result.endpointId != null && moduleId != null) {
       const ep = (tree.endpointsByModule[moduleId] ?? []).find((x) => x.id === result.endpointId);
       if (ep) await handleSelectEndpoint(result.projectId, moduleId, ep);
-    } else if (result.kind === 'project') {
-      await handleOpenProjectGlobals(result.projectId);
     }
   };
 
@@ -1032,11 +1020,12 @@ export function ProjectTreePanel() {
                 >
                   {expandedProject[p.id] ? '▼' : '▶'}
                 </button>
-                <FastTooltip label="项目全局：Headers 与变量">
+                <FastTooltip label="展开或收起模块列表">
                   <button
                     type="button"
                     className="project-tree-label project-tree-name-btn"
-                    onClick={() => void handleOpenProjectGlobals(p.id)}
+                    aria-expanded={!!expandedProject[p.id]}
+                    onClick={() => setExpandedProject((e) => ({ ...e, [p.id]: !e[p.id] }))}
                   >
                     {p.name}
                   </button>
