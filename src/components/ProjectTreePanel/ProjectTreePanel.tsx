@@ -26,6 +26,7 @@ import { Modal } from '../Modal/Modal';
 import { FastTooltip } from '../FastTooltip/FastTooltip';
 import { parseProjectGlobalConfig } from '../../lib/projectMerge';
 import { useEscapeToClose } from '../../hooks/useEscapeToClose';
+import { useEnterToConfirm } from '../../hooks/useEnterToConfirm';
 import {
   buildAllExpanded,
   loadExpandedModules,
@@ -561,6 +562,15 @@ export function ProjectTreePanel({ onSelectEnvironmentProject }: ProjectTreePane
     await refreshAfterTreeMutation();
   };
 
+  const importDialogKeyboard = useEnterToConfirm(importPayload != null, handleConfirmImport);
+  const exportDialogKeyboard = useEnterToConfirm(exportPicker != null, handleConfirmExportPicker);
+  const moveDialogKeyboard = useEnterToConfirm(
+    moveEndpointCtx != null,
+    handleConfirmMoveEndpoint,
+    moveTargetModuleId != null && moveTargetModuleId !== moveEndpointCtx?.moduleId
+  );
+  const deleteDialogKeyboard = useEnterToConfirm(deleteConfirm != null, handleConfirmDelete);
+
   const handleDropModule = async (projectId: number, targetModuleId: number) => {
     if (!dragModuleCtx || dragModuleCtx.projectId !== projectId || dragModuleCtx.moduleId === targetModuleId) return;
     const mods = [...(tree.modulesByProject[projectId] ?? [])];
@@ -720,6 +730,7 @@ export function ProjectTreePanel({ onSelectEnvironmentProject }: ProjectTreePane
           onClick={() => setImportPayload(null)}
         >
           <div
+            {...importDialogKeyboard}
             className="modal-dialog project-import-dialog"
             role="dialog"
             aria-labelledby="project-import-title"
@@ -791,6 +802,7 @@ export function ProjectTreePanel({ onSelectEnvironmentProject }: ProjectTreePane
           onClick={() => setExportPicker(null)}
         >
           <div
+            {...exportDialogKeyboard}
             className="modal-dialog project-export-dialog"
             role="dialog"
             aria-labelledby="project-export-title"
@@ -864,6 +876,7 @@ export function ProjectTreePanel({ onSelectEnvironmentProject }: ProjectTreePane
       {moveEndpointCtx && (
         <div className="modal-overlay" role="presentation" onClick={closeMoveEndpoint}>
           <div
+            {...moveDialogKeyboard}
             className="modal-dialog project-move-dialog"
             role="dialog"
             aria-labelledby="project-move-title"
@@ -908,7 +921,10 @@ export function ProjectTreePanel({ onSelectEnvironmentProject }: ProjectTreePane
                       className={`project-move-module-item${isSelected ? ' selected' : ''}${isCurrent ? ' current' : ''}`}
                       aria-label={`选择目标模块：${module.name}`}
                       aria-pressed={isSelected}
-                      onClick={() => setMoveTargetModuleId(module.id)}
+                      onClick={() => {
+                        setMoveTargetModuleId(module.id);
+                        moveDialogKeyboard.ref.current?.focus();
+                      }}
                     >
                       <span className="project-move-module-main">
                         <span className="project-move-module-name">{module.name}</span>
@@ -943,6 +959,7 @@ export function ProjectTreePanel({ onSelectEnvironmentProject }: ProjectTreePane
       {deleteConfirmCopy && (
         <div className="modal-overlay" role="presentation" onClick={() => setDeleteConfirm(null)}>
           <div
+            {...deleteDialogKeyboard}
             className="modal-dialog project-delete-dialog"
             role="dialog"
             aria-modal="true"

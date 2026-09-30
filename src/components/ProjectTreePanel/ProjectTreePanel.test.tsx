@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { act, render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { ProjectTreePanel } from './ProjectTreePanel';
+import { open, save } from '@tauri-apps/plugin-dialog';
+import { readTextFile } from '@tauri-apps/plugin-fs';
+import { buildProjectExportPayload, importProjectAsNew, parseProjectExportJson } from '../../lib/projectImportExport';
 import { useRequestStore } from '../../stores/requestStore';
 import type { ApiEndpointRow, ModuleRow, ProjectRow } from '../../types';
 
@@ -81,6 +84,12 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({
 vi.mock('@tauri-apps/plugin-fs', () => ({
   readTextFile: vi.fn(),
   writeTextFile: vi.fn(),
+}));
+
+vi.mock('../../lib/projectImportExport', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../lib/projectImportExport')>(),
+  buildProjectExportPayload: vi.fn(),
+  importProjectAsNew: vi.fn(),
 }));
 
 function createMemoryStorage(): Storage {
@@ -362,6 +371,105 @@ describe('ProjectTreePanel', () => {
     });
   });
 
+  it.each([
+    ['删除项目', deleteProjectMock, 1],
+    ['删除模块', deleteModuleMock, 10],
+    ['删除接口', deleteApiEndpointMock, 100],
+  ] as const)('%s弹窗打开后直接按 Enter 确认', async (title, deleteMock, id) => {
+    moduleRowsRef.current = [{
+      id: 10, project_id: 1, name: '用户模块', sort_order: 0, created_at: 0, updated_at: 0,
+    }];
+    endpointRowsRef.current = [{
+      id: 100, module_id: 10, name: '登录接口', protocol: 'http', method: 'GET',
+      url: 'https://api.example.com/login', headers: '{}', params: '{}', body: '{}',
+      sort_order: 0, created_at: 0, updated_at: 0, response_status: null,
+      response_headers: null, response_body: null, response_time_ms: null,
+    }];
+    render(<ProjectTreePanel />);
+    const trigger = await screen.findByRole('button', { name: title });
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    const dialog = screen.getByRole('dialog', { name: title });
+    expect(dialog).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: 'Enter' });
+
+    await waitFor(() => expect(deleteMock).toHaveBeenCalledExactlyOnceWith(id));
+    expect(screen.queryByRole('dialog', { name: title })).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it('导入项目弹窗按 Enter 执行导入', async () => {
+    const json = JSON.stringify({
+      format: 'apix-project', version: 1, exportedAt: 1790726400000,
+      project: { name: '导入项目', global_config: '{}' }, modules: [],
+    });
+    const payload = parseProjectExportJson(json);
+    vi.mocked(open).mockResolvedValueOnce('/tmp/project.json');
+    vi.mocked(readTextFile).mockResolvedValueOnce(json);
+    render(<ProjectTreePanel />);
+    fireEvent.click(await screen.findByRole('button', { name: '导入' }));
+    const dialog = await screen.findByRole('dialog', { name: '导入项目' });
+
+    expect(dialog).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: 'Enter' });
+
+    await waitFor(() => expect(importProjectAsNew).toHaveBeenCalledExactlyOnceWith(payload));
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+  });
+
+  it.each([
+    ['输入法组合输入', { isComposing: true }],
+    ['输入法兼容键码', { keyCode: 229 }],
+    ['长按重复事件', { repeat: true }],
+    ['Ctrl 组合键', { ctrlKey: true }],
+    ['Command 组合键', { metaKey: true }],
+    ['Alt 组合键', { altKey: true }],
+    ['Shift 组合键', { shiftKey: true }],
+  ])('删除确认忽略%s中的 Enter', async (_name, eventOptions) => {
+    render(<ProjectTreePanel />);
+    fireEvent.click(await screen.findByRole('button', { name: '删除项目' }));
+    const dialog = screen.getByRole('dialog', { name: '删除项目' });
+
+    fireEvent.keyDown(dialog, { key: 'Enter', ...eventOptions });
+
+    expect(deleteProjectMock).not.toHaveBeenCalled();
+    expect(dialog).toBeInTheDocument();
+  });
+
+  it('取消按钮上的 Enter 保留按钮默认行为，弹窗关闭后不再响应回车', async () => {
+    render(<ProjectTreePanel />);
+    fireEvent.click(await screen.findByRole('button', { name: '删除项目' }));
+    const cancel = within(screen.getByRole('dialog', { name: '删除项目' }))
+      .getByRole('button', { name: '取消' });
+    cancel.focus();
+
+    // jsdom 不模拟键盘激活按钮；检查默认事件未被拦截，再模拟浏览器的 click。
+    expect(fireEvent.keyDown(cancel, { key: 'Enter' })).toBe(true);
+    expect(deleteProjectMock).not.toHaveBeenCalled();
+    fireEvent.click(cancel);
+    fireEvent.keyDown(document.activeElement!, { key: 'Enter' });
+
+    expect(screen.queryByRole('dialog', { name: '删除项目' })).not.toBeInTheDocument();
+    expect(deleteProjectMock).not.toHaveBeenCalled();
+  });
+
+  it('导出项目弹窗按 Enter 打开保存对话框', async () => {
+    vi.mocked(buildProjectExportPayload).mockResolvedValueOnce(parseProjectExportJson(JSON.stringify({
+      format: 'apix-project', version: 1, exportedAt: 1790726400000,
+      project: { name: '测试项目', global_config: '{}' }, modules: [],
+    })));
+    vi.mocked(save).mockResolvedValueOnce(null);
+    render(<ProjectTreePanel />);
+    fireEvent.click(await screen.findByRole('button', { name: '导出项目 JSON' }));
+    const dialog = await screen.findByRole('dialog', { name: /导出项目 JSON/ });
+
+    expect(dialog).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: 'Enter' });
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+  });
+
   it('按 Escape 关闭删除项目确认弹窗且不删除项目', async () => {
     render(<ProjectTreePanel />);
     expect(await screen.findByText('测试项目')).toBeInTheDocument();
@@ -542,7 +650,7 @@ describe('ProjectTreePanel', () => {
     });
   });
 
-  it('移动接口弹窗以可搜索模块列表选择目标模块', async () => {
+  it.each(['点击', '回车', '搜索框回车'])('移动接口弹窗以可搜索模块列表选择目标模块并%s确认', async (method) => {
     moduleRowsRef.current = [
       {
         id: 10,
@@ -602,15 +710,30 @@ describe('ProjectTreePanel', () => {
     expect(within(dialog).getAllByText('认证模块').length).toBeGreaterThan(0);
     expect(within(dialog).getByPlaceholderText('搜索模块或项目')).toBeInTheDocument();
 
+    fireEvent.keyDown(dialog, { key: 'Enter' });
+    expect(moveApiEndpointMock).not.toHaveBeenCalled();
+
     fireEvent.change(within(dialog).getByPlaceholderText('搜索模块或项目'), { target: { value: '用户' } });
     expect(within(dialog).getByRole('button', { name: '选择目标模块：用户模块' })).toBeInTheDocument();
     expect(within(dialog).queryByRole('button', { name: '选择目标模块：订单模块' })).not.toBeInTheDocument();
 
-    fireEvent.click(within(dialog).getByRole('button', { name: '选择目标模块：用户模块' }));
-    fireEvent.click(within(dialog).getByRole('button', { name: '确认移动' }));
+    const targetModule = within(dialog).getByRole('button', { name: '选择目标模块：用户模块' });
+    targetModule.focus();
+    expect(fireEvent.keyDown(targetModule, { key: 'Enter' })).toBe(true);
+    fireEvent.click(targetModule);
+    expect(moveApiEndpointMock).not.toHaveBeenCalled();
+    if (method === '回车') {
+      fireEvent.keyDown(document.activeElement!, { key: 'Enter' });
+    } else if (method === '搜索框回车') {
+      const search = within(dialog).getByPlaceholderText('搜索模块或项目');
+      search.focus();
+      fireEvent.keyDown(search, { key: 'Enter' });
+    } else {
+      fireEvent.click(within(dialog).getByRole('button', { name: '确认移动' }));
+    }
 
     await waitFor(() => {
-      expect(moveApiEndpointMock).toHaveBeenCalledWith(100, 20);
+      expect(moveApiEndpointMock).toHaveBeenCalledExactlyOnceWith(100, 20);
     });
   });
 
