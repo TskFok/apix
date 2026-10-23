@@ -106,7 +106,7 @@ Apix 使用 Tauri SQL 插件管理本地 SQLite 数据库 `apix.db`。当前持�
 ### 环境要求
 
 - Node.js 与 npm
-- Rust 工具链
+- Rust 1.90 或更新的稳定工具链
 - Tauri 2 所需的系统依赖
 
 ### 安装依赖
